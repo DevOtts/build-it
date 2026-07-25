@@ -4,6 +4,26 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [3.1.1] — 2026-07-25
+
+Brand-asset follow-up to the v3.1.0 rename: the files were renamed then; now
+the pixels match.
+
+### Changed
+- Regenerated `assets/build-it-header.png`, `.gif` and `build-it-animation.mp4`
+  with the build-it wordmark, the "plan-it plans it, build-it builds it."
+  tagline, and /plan-it → /build-it → /review-it lifecycle chips replacing the
+  retired Opus→Fable tiles (GIF 26MB→12.6MB, mp4 3.8MB→0.7MB).
+- Regenerated `assets/build-it-flow.png` with the /build-it pill (same layout).
+- Marketplace now self-hosts as `build-it` (was still named `devotts`, a
+  leftover from the fable-it era that collided with the review-it-hosted
+  devotts hub and made `build-it@devotts` unresolvable). Install is now
+  `/plugin install build-it@build-it`; README and SKILL.md updated.
+
+### Removed
+- `build-it-field-guide.pdf` — orphaned (no README references) and written
+  entirely around the retired v1 positioning. Git history keeps it.
+
 ## [3.1.0] — 2026-07-24
 
 **fable-it is now build-it.** What started as a single plugin ("make your model

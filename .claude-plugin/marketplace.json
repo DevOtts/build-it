@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "DevOtts plugins for Claude Code.",
-    "version": "3.1.0"
+    "version": "3.1.1"
   },
   "plugins": [
     {
@@ -36,7 +36,7 @@
       "name": "build-it",
       "source": "./plugins/build-it",
       "description": "Single-command autonomous delivery orchestrator — the build stage of the *-it lifecycle (plan-it plans it, build-it builds it); formerly fable-it. Model-adaptive for Sonnet 5 and Opus 4.8. Hand it a goal and a numbered Definition of Done and it runs the whole job to completion, conducting launch/iterate/full-qa/chrome-cdp with a 5-gate catalog, disk-backed run state, an evidence ledger (VERIFIED = lookup), a fresh-context verifier, and an honest per-criterion report.",
-      "version": "3.1.0",
+      "version": "3.1.1",
       "author": {
         "name": "DevOtts",
         "url": "https://github.com/DevOtts"
