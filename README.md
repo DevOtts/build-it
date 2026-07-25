@@ -103,10 +103,10 @@ build-it ships as both a **Claude Code plugin** and a standard repo-root **`SKIL
 /plugin marketplace add DevOtts/build-it
 
 # 2. Install the plugin (plugin-name@marketplace-name)
-/plugin install build-it@devotts
+/plugin install build-it@build-it
 ```
 
-The marketplace name `devotts` comes from the `name` field in [marketplace.json](.claude-plugin/marketplace.json). This is the **only** target that gets the full bundle — the conductor *plus* `launch`, `iterate`, `full-qa` and `chrome-cdp-control`, with slash-command invocation and auto-activation. (Skills-CLI alternative: `npx skills add DevOtts/build-it -a claude-code`.)
+The marketplace name `build-it` comes from the `name` field in [marketplace.json](.claude-plugin/marketplace.json). This is the **only** target that gets the full bundle — the conductor *plus* `launch`, `iterate`, `full-qa` and `chrome-cdp-control`, with slash-command invocation and auto-activation. (Skills-CLI alternative: `npx skills add DevOtts/build-it -a claude-code`.)
 
 ### Codex  ·  *OpenAI Codex CLI*
 

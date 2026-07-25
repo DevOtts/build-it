@@ -70,7 +70,7 @@ One verdict source. Per DoD criterion: `VERIFIED` (quote the ledger evidence) / 
 
 ```sh
 /plugin marketplace add DevOtts/build-it
-/plugin install build-it@devotts
+/plugin install build-it@build-it
 ```
 
 **Any other agent (Cursor, Codex, Copilot, 70+ tools):**
