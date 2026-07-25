@@ -1,5 +1,3 @@
 {
-  "enabledPlugins": {
-    "build-it@devotts": true
-  }
+  "enabledPlugins": {}
 }
