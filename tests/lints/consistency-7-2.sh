@@ -14,8 +14,8 @@ fail=0
 "$DIR/t17-cdp-dedup.sh" >/dev/null && echo "ok(§7.2-1): CDP core single-sourced" || { echo "FAIL(§7.2-1): CDP duplication"; fail=1; }
 
 # 2 — unattended runs cannot hit an interactive gate
-L="$REPO/plugins/fable-it/skills/launch/SKILL.md"
-C="$REPO/plugins/fable-it/skills/fable-it/SKILL.md"
+L="$REPO/plugins/build-it/skills/launch/SKILL.md"
+C="$REPO/plugins/build-it/skills/build-it/SKILL.md"
 grep -q "unattended mode" "$C" && grep -qi "never waited on" "$C" || { echo "FAIL(§7.2-2): conductor does not force unattended /launch"; fail=1; }
 p2=$(awk '/^## Phase 2/,/^## Phase 3/' "$L"); p4=$(awk '/^### 4.2/,/^### 4.3/' "$L")
 echo "$p2" | grep -qi "unattended" && echo "$p4" | grep -qi "unattended" \
@@ -23,8 +23,8 @@ echo "$p2" | grep -qi "unattended" && echo "$p4" | grep -qi "unattended" \
   || { echo "FAIL(§7.2-2): an approval gate lacks the unattended branch"; fail=1; }
 
 # 3 — one report verdict
-grep -qi "feeder" "$REPO/plugins/fable-it/skills/iterate/SKILL.md" \
-  && grep -qi "never stands as a second" "$REPO/plugins/fable-it/skills/full-qa/SKILL.md" \
+grep -qi "feeder" "$REPO/plugins/build-it/skills/iterate/SKILL.md" \
+  && grep -qi "never stands as a second" "$REPO/plugins/build-it/skills/full-qa/SKILL.md" \
   && grep -qi "single verdict source" "$C" \
   && echo "ok(§7.2-3): one verdict source, loop reports are feeders" \
   || { echo "FAIL(§7.2-3): competing report verdicts"; fail=1; }

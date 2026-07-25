@@ -1,5 +1,5 @@
 {
   "enabledPlugins": {
-    "fable-it@devotts": true
+    "build-it@devotts": true
   }
 }

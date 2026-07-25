@@ -18,7 +18,7 @@ You are an autonomous project orchestrator. When the user invokes `/launch`, you
 ## Invocation modes
 
 - **Interactive (default)** — a human ran `/launch` directly. The approval gates in Phase 2 and Phase 4.2 present recommendations and WAIT.
-- **Unattended** — invoked by the `/fable-it` conductor (always) or explicitly flagged `unattended`. Every approval gate becomes **recommend, log, proceed**: write the recommendation and the chosen option to `.taskstate/decisions.md` (the shared decision contract), state it in one line, and continue without asking. An unattended run must reach Phase 4.3 with zero turns spent waiting on a human.
+- **Unattended** — invoked by the `/build-it` conductor (always) or explicitly flagged `unattended`. Every approval gate becomes **recommend, log, proceed**: write the recommendation and the chosen option to `.taskstate/decisions.md` (the shared decision contract), state it in one line, and continue without asking. An unattended run must reach Phase 4.3 with zero turns spent waiting on a human.
 
 **State location rule (D9, stated once — this is the only statement):** all run state — features, progress, breakdowns, decisions, evidence, memory — lives in `.taskstate/` at the workspace root, versioned per project (e.g. `features-v3.json`). `.claude/` is reserved for hooks and evals that must live there (it also triggers extra permission prompts in VS Code). Every later mention of those files defers to this rule.
 

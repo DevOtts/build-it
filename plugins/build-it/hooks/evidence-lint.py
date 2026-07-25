@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""fable-it hardened mode — evidence lint (Claude Code PreToolUse hook on Write|Edit).
+"""build-it hardened mode — evidence lint (Claude Code PreToolUse hook on Write|Edit).
 
 When the final report is written, rejects any DoD row marked VERIFIED whose
 evidence cell is empty or has no matching entry in .taskstate/evidence.md.
 Fail-open: any script error allows the write and logs to .taskstate/hooks.log.
-One-line disable: FABLE_IT_HOOKS_DISABLED=1.
+One-line disable: BUILD_IT_HOOKS_DISABLED=1 (legacy FABLE_IT_HOOKS_DISABLED=1 also honored).
 """
 import json
 import os
@@ -25,7 +25,7 @@ def log(msg):
 
 
 def is_report_write(file_path):
-    return os.path.basename(file_path) == "report.md" and ".fable-it-reports" in file_path
+    return os.path.basename(file_path) == "report.md" and ".build-it-reports" in file_path
 
 
 def verified_rows(content):
@@ -55,7 +55,7 @@ def has_matching_entry(evidence_cell, ledger_text):
 
 
 def main():
-    if os.environ.get("FABLE_IT_HOOKS_DISABLED") == "1":
+    if os.environ.get("BUILD_IT_HOOKS_DISABLED") == "1" or os.environ.get("FABLE_IT_HOOKS_DISABLED") == "1":
         return
     data = json.load(sys.stdin)
     tool_input = data.get("tool_input", {})
@@ -74,7 +74,7 @@ def main():
             bad.append(label)
     if bad:
         reason = (
-            "Evidence lint (fable-it hardened mode): report rejected — these rows "
+            "Evidence lint (build-it hardened mode): report rejected — these rows "
             "are marked VERIFIED with an empty evidence cell or no matching entry "
             "in .taskstate/evidence.md: %s. VERIFIED is a ledger lookup: append the "
             "real tool result to the ledger, or demote the row to "

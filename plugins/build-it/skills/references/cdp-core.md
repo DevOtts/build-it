@@ -1,4 +1,4 @@
-# CDP core — shared mechanics for all fable-it browser work
+# CDP core — shared mechanics for all build-it browser work
 
 Single source of truth for Chrome DevTools Protocol mechanics. `/chrome-cdp-control`
 (manual, authenticated) and `/full-qa` (autonomous, test environments) both read this
@@ -125,4 +125,4 @@ must refuse authenticated-session cases and re-route them. No autonomous write p
 on an authenticated session, ever.
 
 ---
-_Part of the fable-it plugin · authored by [DevOtts](https://github.com/DevOtts)._
+_Part of the build-it plugin · authored by [DevOtts](https://github.com/DevOtts)._

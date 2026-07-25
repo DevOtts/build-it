@@ -204,7 +204,7 @@ with: ID, description, steps, expected result."
 
 ## Phase 6 — FINAL REPORT
 
-**This report is a feeder.** Running under `/fable-it`, every result maps onto the conductor's unified report and the Go-Live verdict maps onto the DoD table — it never stands as a second, competing verdict. Standalone runs use the format directly. Either way, append each test's evidence (command · quoted output · verdict) to `.taskstate/evidence.md` as it happens — the conductor's claim gate and verifier read that ledger.
+**This report is a feeder.** Running under `/build-it`, every result maps onto the conductor's unified report and the Go-Live verdict maps onto the DoD table — it never stands as a second, competing verdict. Standalone runs use the format directly. Either way, append each test's evidence (command · quoted output · verdict) to `.taskstate/evidence.md` as it happens — the conductor's claim gate and verifier read that ledger.
 
 When all tests complete (or you've exhausted fix cycles), output:
 
@@ -240,7 +240,7 @@ When all tests complete (or you've exhausted fix cycles), output:
 - [every test skipped, sampled, bounded, or loop stopped early, and why — or "nothing was capped"]
 
 ### Go-Live Readiness
-**READY** / **NOT READY** — [one sentence verdict; under /fable-it this maps onto the conductor's DoD table rather than standing alone]
+**READY** / **NOT READY** — [one sentence verdict; under /build-it this maps onto the conductor's DoD table rather than standing alone]
 ```
 
 ---

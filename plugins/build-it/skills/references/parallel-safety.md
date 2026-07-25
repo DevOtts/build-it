@@ -54,9 +54,9 @@ When fanning out agents that **write/edit files**:
 ```
 base=$(git branch --show-current)                      # the run base
 for lane in A B C; do
-  git worktree add -b agent/$lane .fable-it/wt/$lane "$base"   # isolated tree + branch
+  git worktree add -b agent/$lane .build-it/wt/$lane "$base"   # isolated tree + branch
 done
-# dispatch one mutating agent per worktree; its cwd is .fable-it/wt/<lane>.
+# dispatch one mutating agent per worktree; its cwd is .build-it/wt/<lane>.
 # each agent works ONLY inside its worktree and NEVER runs git merge/checkout/reset.
 ```
 
@@ -65,7 +65,7 @@ done
 - **Merge-back is coordinator-only and sequential** (§3) — workers never merge.
 - Prefer the harness's native isolation when available (e.g. an agent runner's
   `isolation: worktree` option) — same guarantee, auto-cleaned when unchanged.
-- Clean up: `git worktree remove .fable-it/wt/<lane>` after merge; `git worktree prune`.
+- Clean up: `git worktree remove .build-it/wt/<lane>` after merge; `git worktree prune`.
 - A crashed run can leave `agent/<lane>` branches behind, which makes the next
   `git worktree add -b agent/<lane>` fail. Before dispatch, check
   `git branch --list 'agent/*'`: salvage or delete the leftover **with a logged note**

@@ -6,8 +6,8 @@
 # docs/03-enhancement-spec.md §4.1 (which does not ship) into the plugin.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-F="$REPO/plugins/fable-it/skills/launch/SKILL.md"
-T="$REPO/plugins/fable-it/skills/references/model-tiers.md"
+F="$REPO/plugins/build-it/skills/launch/SKILL.md"
+T="$REPO/plugins/build-it/skills/references/model-tiers.md"
 fail=0
 [ -f "$F" ] || { echo "FAIL: $F missing"; exit 1; }
 
@@ -15,7 +15,7 @@ fail=0
 if [ -f "$T" ] && grep -qi "escalate on struggle" "$T"; then
   echo "ok: canonical tier table ships with the plugin (incl. escalation gate)"
 else
-  echo "FAIL: plugins/fable-it/skills/references/model-tiers.md missing or lacks the escalation gate"; fail=1
+  echo "FAIL: plugins/build-it/skills/references/model-tiers.md missing or lacks the escalation gate"; fail=1
 fi
 
 # reference to the canonical table (and no stale pointer to the non-shipping spec)

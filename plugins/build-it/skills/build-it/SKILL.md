@@ -1,11 +1,11 @@
 ---
-name: fable-it
-description: Single-command autonomous delivery orchestrator. Invoke it with a goal and a numbered Definition of Done (DoD) and it runs the whole job to completion — typically unattended, overnight — by conducting the bundled /launch, /iterate, /full-qa and /chrome-cdp-control skills. v2 encodes the Fable 5 behavioral contract as checkable gates (not postures) with disk-backed run state, an evidence ledger that makes VERIFIED a lookup, and a model-adaptive posture for Sonnet 5 and Opus 4.8. Use this whenever the user says "/fable-it", "fable it", "fable-it", "ship this", "run to DoD", "work autonomously until done", "I'm going to bed, finish this", "green light, take decisions", or pastes a goal + numbered acceptance criteria and expects an autonomous overnight run with a report waiting in the morning. Also use when the request describes an agile, cycle-based build (epics → tests → code → test → fix → loop) split across Claude teams or subagents. Prefer this over invoking /launch or /iterate directly when the request is a full goal-to-DoD delivery rather than a single phase.
+name: build-it
+description: Single-command autonomous delivery orchestrator. Invoke it with a goal and a numbered Definition of Done (DoD) and it runs the whole job to completion — typically unattended, overnight — by conducting the bundled /launch, /iterate, /full-qa and /chrome-cdp-control skills. v2 encodes the Fable 5 behavioral contract as checkable gates (not postures) with disk-backed run state, an evidence ledger that makes VERIFIED a lookup, and a model-adaptive posture for Sonnet 5 and Opus 4.8. Use this whenever the user says "/build-it", "build it", "build-it", "/fable-it", "fable it", "fable-it" (the pre-v3.1.0 name — still routes here), "ship this", "run to DoD", "work autonomously until done", "I'm going to bed, finish this", "green light, take decisions", or pastes a goal + numbered acceptance criteria and expects an autonomous overnight run with a report waiting in the morning. Also use when the request describes an agile, cycle-based build (epics → tests → code → test → fix → loop) split across Claude teams or subagents. Prefer this over invoking /launch or /iterate directly when the request is a full goal-to-DoD delivery rather than a single phase.
 author: DevOtts
 author_url: https://github.com/DevOtts
 ---
 
-# /fable-it — Autonomous Delivery Orchestrator (v2)
+# /build-it — Autonomous Delivery Orchestrator (v2)
 
 You are running a goal-to-DoD delivery, usually unattended. The user hands you a goal and a numbered Definition of Done and goes to sleep. Your job is to reach every DoD item, or stop honestly at the ones you could not, and leave a report and a credentials file they can act on in the morning.
 
@@ -44,7 +44,7 @@ Created at Step 2, all in `.taskstate/` (run state never goes in `.claude/`, whi
 | `evidence.md` | **the evidence ledger**: one entry per criterion per verification attempt — timestamp · command · quoted output · verdict |
 | `run-memory.md` | failed approaches (never retry blind), env quirks, decision rationale, surprises, delegation tier log |
 
-Cross-run memory: at the end of the run, roll durable lessons into `.fable-it-reports/lessons.md`; read it at Step 0 of every future run on the same project.
+Cross-run memory: at the end of the run, roll durable lessons into `.build-it-reports/lessons.md`; read it at Step 0 of every future run on the same project.
 
 The claim-grounding rule (Anthropic-measured — it "nearly eliminated fabricated status reports"): a criterion may be reported VERIFIED **only if `evidence.md` holds a passing tool result from this session**. Everything else is IMPLEMENTED-NOT-VERIFIED or BLOCKED. This converts honest reporting from self-policing into a lookup.
 
@@ -58,7 +58,7 @@ The claim-grounding rule (Anthropic-measured — it "nearly eliminated fabricate
 - `paths` — default: infer from the goal and workspace.
 - `credentials` — default: read `.full.credentials`, then `.env`. Tokens created mid-run go in the credentials artifact (Step 8).
 - `scope fence` — default: nothing fenced, but honor any "don't touch X" in the goal.
-- `report location` — default: `.fable-it-reports/` at the workspace root (create it; keeps the repo root clean and one path `.gitignore`-able).
+- `report location` — default: `.build-it-reports/` at the workspace root (create it; keeps the repo root clean and one path `.gitignore`-able).
 - `parallelization` — default: don't ask; infer at Step 3.
 
 If the goal text already contains paths, credentials hints, or scope fences, lift them out rather than asking.
@@ -69,7 +69,7 @@ If the goal text already contains paths, credentials hints, or scope fences, lif
 
 Extract the goal and DoD from whatever the user pasted, however informally.
 - DoD already numbered and testable → keep verbatim. Prose or vague → restructure into numbered, individually verifiable criteria and show the result. Do not silently reinterpret — a wrong DoD wastes the whole unattended run.
-- Read `.fable-it-reports/lessons.md` if it exists — prior runs on this project already paid for those lessons.
+- Read `.build-it-reports/lessons.md` if it exists — prior runs on this project already paid for those lessons.
 - **Model-adaptive posture:** detect and declare the running model (harness self-identification; else the kickoff prompt's declaration; else assume the strictest posture). Apply the per-model posture table in `../references/model-tiers.md` §1 (relative to this skill's base directory; ships with the plugin) as deltas on this contract — reference that table, never copy it (copies drift). Sonnet 5 runs tighten re-grounding cadence and restate gates inline; Opus 4.8 runs apply the full over-engineering suppressors; Fable 5 runs may relax the verifier to recommended. State the detected model and applied posture row in your first status update.
 
 State optional-slot assumptions in one short block, then proceed. Do not wait for confirmation; the user said go.
@@ -142,7 +142,7 @@ Run cycles until every criterion is VERIFIED in the ledger or reasonable approac
 One report format. It is **the single verdict source**: `/iterate` and `/full-qa` reports are feeders — their findings and Go-Live verdicts map onto this DoD table and never stand alone beside it.
 
 ```
-# Fable-it Report — <goal, one line>
+# Build-it Report — <goal, one line>
 Run window: <start> → <end>   |   Model: <detected model + posture row>   |   Approach: <single / subagents / team>
 
 ## DoD status
@@ -170,7 +170,7 @@ Run window: <start> → <end>   |   Model: <detected model + posture row>   |   
 
 Every status cell obeys the claim gate: VERIFIED rows quote their `evidence.md` entry; rows without a ledger entry cannot read VERIFIED. Fill the report from the ledger, not from memory.
 
-**Communication register:** written for a teammate waking up and catching up. Lead with the outcome; complete sentences; no invented codenames, no fragment/arrow-chain shorthand; include what matters even if longer — readable beats concise. Roll durable lessons (failed approaches, env quirks worth keeping) from `run-memory.md` into `.fable-it-reports/lessons.md`.
+**Communication register:** written for a teammate waking up and catching up. Lead with the outcome; complete sentences; no invented codenames, no fragment/arrow-chain shorthand; include what matters even if longer — readable beats concise. Roll durable lessons (failed approaches, env quirks worth keeping) from `run-memory.md` into `.build-it-reports/lessons.md`.
 
 ## Step 7 — Verify with fresh eyes (mandatory before delivery)
 
@@ -184,8 +184,8 @@ The draft report never ships unaudited. Self-critique is weaker than fresh eyes:
 
 ## Step 8 — Deliver the artifacts
 
-Write to the report location (default `.fable-it-reports/`, never the repo root):
-1. **The status report** (Step 6 format) at `.fable-it-reports/report.md`.
+Write to the report location (default `.build-it-reports/`, never the repo root):
+1. **The status report** (Step 6 format) at `.build-it-reports/report.md`.
 2. **The credentials artifact** — if any token, login, or credential was created this run, a separate file listing each (service, value, where used, how to rotate). Never bury credentials in report prose.
 
 Tell the user the exact paths, then stop. Do not append a plan or "want me to continue?" — the turn-end gate forbids ending on a promise, and a finished run ends on the outcome.

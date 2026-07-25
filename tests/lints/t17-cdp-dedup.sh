@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # T17 (E5, grep-lint): CDP core deduplicated across the whole plugin.
-# Pass criteria (delivery/epics-fable-it-v2.md):
+# Pass criteria (delivery/epics-build-it-v2.md):
 #   1. Selector ladder + CDP action template appear in exactly one file (the core).
 #   2. Other skills reference the core file.
 #   3. No `9222` outside the core file's default declaration lines.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-PLUGIN="$REPO/plugins/fable-it"
+PLUGIN="$REPO/plugins/build-it"
 CORE="$PLUGIN/skills/references/cdp-core.md"
 fail=0
 

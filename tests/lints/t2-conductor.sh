@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # T2 (E1, grep-lint): conductor gates catalog + claim-grounding co-occurrence + line budget.
-# Pass criteria (delivery/epics-fable-it-v2.md):
+# Pass criteria (delivery/epics-build-it-v2.md):
 #   1. Every VERIFIED mention co-occurs with the ledger-lookup rule (evidence/ledger
 #      reference within a ±2-line window).
 #   2. All 5 gates present, each with trigger + test + action.
 #   3. File <= 330 lines.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-F="$REPO/plugins/fable-it/skills/fable-it/SKILL.md"
+F="$REPO/plugins/build-it/skills/build-it/SKILL.md"
 fail=0
 
 [ -f "$F" ] || { echo "FAIL: $F missing"; exit 1; }

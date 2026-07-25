@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fable-it v2 — run every scripted lint + the hook unit tests. Green = ship-ready
+# build-it v2 — run every scripted lint + the hook unit tests. Green = ship-ready
 # per CONTRACT §7 (lint half; tabletop goldens and [REAL] cases are judged separately).
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,7 +13,7 @@ for s in "$DIR"/t*.sh "$DIR/consistency-7-2.sh"; do
     echo "FAIL  $name"; echo "$out" | sed 's/^/      /'; fail=1
   fi
 done
-if out=$("$REPO/plugins/fable-it/hooks/tests/run-tests.sh" 2>&1); then
+if out=$("$REPO/plugins/build-it/hooks/tests/run-tests.sh" 2>&1); then
   echo "PASS  hooks/tests/run-tests.sh"
 else
   echo "FAIL  hooks/tests/run-tests.sh"; echo "$out" | sed 's/^/      /'; fail=1

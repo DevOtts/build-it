@@ -4,7 +4,7 @@
 # D9 state-location rule stated exactly once.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-F="$REPO/plugins/fable-it/skills/launch/SKILL.md"
+F="$REPO/plugins/build-it/skills/launch/SKILL.md"
 fail=0
 [ -f "$F" ] || { echo "FAIL: $F missing"; exit 1; }
 

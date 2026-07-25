@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # T8 (E2, grep-lint): verifier prompt template carries the reading restriction and
 # challenge-by-default instruction.
-# Pass criteria (delivery/epics-fable-it-v2.md): contains the reading restriction
+# Pass criteria (delivery/epics-build-it-v2.md): contains the reading restriction
 # (only DoD + report + evidence.md; never the implementation conversation) and
 # instructs challenge-by-default.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-F="$REPO/plugins/fable-it/skills/fable-it/SKILL.md"
+F="$REPO/plugins/build-it/skills/build-it/SKILL.md"
 fail=0
 
 [ -f "$F" ] || { echo "FAIL: $F missing"; exit 1; }

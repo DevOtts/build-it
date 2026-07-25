@@ -1,21 +1,21 @@
 ---
-name: fable-it
-description: 'Autonomous goal-to-DoD delivery orchestrator — "Make your model behave like Fable". Hand it a goal and a numbered Definition of Done and it runs the whole job to completion, typically unattended, enforcing checkable gates (turn-end, claim, state-change, phase-boundary, delegation, and safe-parallel: interlock, worktree, integration), disk-backed run state, an evidence ledger that makes VERIFIED a lookup, a fresh-eyes verification pass, and an honest per-criterion report. Model-adaptive for Sonnet 5 and Opus 4.8; host-agnostic (Claude Code, Cursor, Codex, Copilot and any SKILL.md-compatible agent).'
-version: 3.0.1
+name: build-it
+description: 'Autonomous goal-to-DoD delivery orchestrator — the build stage of the *-it lifecycle ("plan-it plans it, build-it builds it"); formerly named fable-it. Hand it a goal and a numbered Definition of Done and it runs the whole job to completion, typically unattended, enforcing checkable gates (turn-end, claim, state-change, phase-boundary, delegation, and safe-parallel: interlock, worktree, integration), disk-backed run state, an evidence ledger that makes VERIFIED a lookup, a fresh-eyes verification pass, and an honest per-criterion report. Model-adaptive for Sonnet 5 and Opus 4.8; host-agnostic (Claude Code, Cursor, Codex, Copilot and any SKILL.md-compatible agent).'
+version: 3.1.0
 license: MIT
 author: DevOtts
 author_url: https://github.com/DevOtts
-homepage: https://github.com/DevOtts/fable-it
-repository: https://github.com/DevOtts/fable-it
+homepage: https://github.com/DevOtts/build-it
+repository: https://github.com/DevOtts/build-it
 metadata:
   platforms: [claude-code, cursor, openclaw, mcp, openai]
   category: "Agents & Orchestration"
-keywords: [autonomous, orchestrator, agents, definition-of-done, workflow, claude-code, evidence-ledger]
+keywords: [autonomous, orchestrator, agents, definition-of-done, workflow, claude-code, evidence-ledger, fable-it]
 ---
 
-# fable-it — Autonomous Delivery Orchestrator
+# build-it — Autonomous Delivery Orchestrator
 
-**Make your model behave like Fable.** You hand fable-it a **goal** and a **numbered Definition of Done (DoD)**; it runs the whole job to completion — typically unattended, overnight — and leaves an honest, evidence-backed report. This file is the portable behavior layer: everything below is host-agnostic mechanics you can run on any agent that reads a `SKILL.md`. (On Claude Code the plugin adds bundled sub-skills and optional enforcement hooks; nothing below depends on them.)
+**plan-it plans it, build-it builds it.** (Formerly `fable-it` — renamed in v3.1.0.) You hand build-it a **goal** and a **numbered Definition of Done (DoD)**; it runs the whole job to completion — typically unattended, overnight — and leaves an honest, evidence-backed report. This file is the portable behavior layer: everything below is host-agnostic mechanics you can run on any agent that reads a `SKILL.md`. (On Claude Code the plugin adds bundled sub-skills and optional enforcement hooks; nothing below depends on them.)
 
 Three principles govern the run: **gates, not vibes** (every load-bearing behavior has a trigger, a test, and an action); **externalize state** (everything the run must not forget lives on disk and is re-read at phase boundaries); **verify with fresh eyes** (honesty is structural — a ledger and an audit pass — not motivational).
 
@@ -43,7 +43,7 @@ Create these four files in `.taskstate/` before writing any code, and re-read th
 | `evidence.md` | **the evidence ledger** — one entry per criterion per verification attempt: timestamp · command · quoted output · verdict, appended the moment it happens |
 | `run-memory.md` | failed approaches (never retry blind), environment quirks, decision rationale, surprises |
 
-Cross-run memory: at the end of a run, roll durable lessons into `.fable-it-reports/lessons.md`; read it at the start of future runs on the same project.
+Cross-run memory: at the end of a run, roll durable lessons into `.build-it-reports/lessons.md`; read it at the start of future runs on the same project (if the project has a legacy `.fable-it-reports/lessons.md` from pre-v3.1.0 runs, read that too).
 
 **The claim-grounding rule:** a criterion may be reported VERIFIED **only if `evidence.md` holds a passing result from this session**. Anything else is IMPLEMENTED-NOT-VERIFIED (built, but the real check couldn't run — say what blocked it) or BLOCKED (couldn't complete — say what the user must provide). Never VERIFIED on a mock, an assumption, or memory.
 
@@ -54,7 +54,7 @@ Cross-run memory: at the end of a run, roll durable lessons into `.fable-it-repo
 3. **Pre-ground.** Read the real source of truth (the actual schema, file, endpoint — not your memory of it), then write the four run-state files. A criterion with no nameable verification path gets flagged now.
 4. **Decompose and route.** Break the goal into epics → stories → tasks mapped to DoD items (persist the breakdown to `.taskstate/`). Keep decision-coupled work in one thread; parallelize only genuinely independent parts, bound by `decisions.md`. **Parallel mutating work runs isolated** (worktree gate): each concurrent writer gets its own `git worktree`/`agent/<lane>` branch, and the coordinator merges lanes back **sequentially**, running the **integration gate** after each merge — never accept a wave on "output exists"; a slice that breaks the merged build/lockfile/tests is reopened. Read-only fan-out may share the tree. Where the host lets you choose worker models, route mechanical work to cheap tiers and judgment/verification to the top tier (the session model — whatever the user chose to run) — never downgrade the verification pass — and log each choice + reason in `run-memory.md`. Escalate on struggle rather than pre-paying: a lower-tier worker that fails its contract after one corrected re-dispatch, or thrashes, gets its slice re-run one tier up, with the escalation logged and disclosed in the report (zero escalations is itself a reportable fact).
 5. **Run the cycles.** Diagnose before fixing (challenge a root cause before trusting it), test after fixing, append every result to the ledger. Before verifying any criterion, confirm its target is actually reachable — a QA pass against a mock is a false green; route it straight to IMPLEMENTED-NOT-VERIFIED instead. Resume from `.taskstate/` after any crash; infra failure is not task failure.
-6. **Verify with fresh eyes, then report.** Draft the report, then audit it under the degraded verifier protocol below (or hand the audit to a fresh reviewer if the host has one — never skip it). Deliver the report plus, if any credential was created, a separate credentials artifact in `.fable-it-reports/`.
+6. **Verify with fresh eyes, then report.** Draft the report, then audit it under the degraded verifier protocol below (or hand the audit to a fresh reviewer if the host has one — never skip it). Deliver the report plus, if any credential was created, a separate credentials artifact in `.build-it-reports/`.
 
 ## The degraded verifier protocol
 
@@ -69,14 +69,14 @@ One verdict source. Per DoD criterion: `VERIFIED` (quote the ledger evidence) / 
 **Claude Code plugin (recommended)** — adds the bundled `/launch`, `/iterate`, `/full-qa` and `/chrome-cdp-control` skills the conductor routes to, plus optional fail-open enforcement hooks:
 
 ```sh
-/plugin marketplace add DevOtts/fable-it
-/plugin install fable-it@devotts
+/plugin marketplace add DevOtts/build-it
+/plugin install build-it@devotts
 ```
 
 **Any other agent (Cursor, Codex, Copilot, 70+ tools):**
 
 ```sh
-npx skills add DevOtts/fable-it -a <agent>
+npx skills add DevOtts/build-it -a <agent>
 ```
 
 Without the bundled skills, run every phase inline per the mechanics above — the behavior layer is the product; degrade, never break.

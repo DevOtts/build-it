@@ -58,12 +58,12 @@ assert "T22c: honest BLOCKED terminal state is allowed" $?
 # T21 — evidence-lint.py
 ########################################
 mk_t21() { # dir, report_content, ledger_content
-  local d="$TMP/$1"; mkdir -p "$d/.taskstate" "$d/.fable-it-reports"
+  local d="$TMP/$1"; mkdir -p "$d/.taskstate" "$d/.build-it-reports"
   printf '%s\n' "$3" > "$d/.taskstate/evidence.md"
   python3 - "$d" "$2" <<'PY'
 import json, sys, os
 d, report = sys.argv[1], sys.argv[2]
-payload = {"tool_name": "Write", "tool_input": {"file_path": os.path.join(d, ".fable-it-reports", "report.md"), "content": report}}
+payload = {"tool_name": "Write", "tool_input": {"file_path": os.path.join(d, ".build-it-reports", "report.md"), "content": report}}
 with open(os.path.join(d, "stdin.json"), "w") as f:
     json.dump(payload, f)
 PY

@@ -3,9 +3,9 @@
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 ROOT="$REPO/SKILL.md"
-COND="$REPO/plugins/fable-it/skills/fable-it/SKILL.md"
+COND="$REPO/plugins/build-it/skills/build-it/SKILL.md"
 RM="$REPO/README.md"
-PJ="$REPO/plugins/fable-it/.claude-plugin/plugin.json"
+PJ="$REPO/plugins/build-it/.claude-plugin/plugin.json"
 MJ="$REPO/.claude-plugin/marketplace.json"
 fail=0
 
@@ -41,8 +41,10 @@ fi
 ########################################
 # T20b — README + root SKILL.md rebrand, sources, corrected claim
 ########################################
-grep -q "Make your model behave like Fable" "$RM" && echo "ok(T20b): README tagline" || { echo "FAIL(T20b): README tagline missing"; fail=1; }
-grep -q "Make your model behave like Fable" "$ROOT" && echo "ok(T20b): root SKILL tagline" || { echo "FAIL(T20b): root tagline missing"; fail=1; }
+grep -q "plan-it plans it, build-it builds it" "$RM" && echo "ok(T20b): README tagline" || { echo "FAIL(T20b): README tagline missing"; fail=1; }
+grep -q "plan-it plans it, build-it builds it" "$ROOT" && echo "ok(T20b): root SKILL tagline" || { echo "FAIL(T20b): root tagline missing"; fail=1; }
+stale=$(grep -rn "Make your model behave like Fable" "$RM" "$ROOT" || true)
+[ -z "$stale" ] && echo "ok(T20b): no stale v2/v3.0 tagline" || { echo "FAIL(T20b): stale fable-era tagline:"; echo "$stale"; fail=1; }
 stale=$(grep -rn "Make Opus behave like Fable" "$RM" "$ROOT" || true)
 [ -z "$stale" ] && echo "ok(T20b): no stale v1 tagline" || { echo "FAIL(T20b): stale tagline:"; echo "$stale"; fail=1; }
 if grep -q "runs%20on-Opus-blueviolet" "$RM"; then

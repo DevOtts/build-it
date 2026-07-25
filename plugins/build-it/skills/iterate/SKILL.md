@@ -119,7 +119,7 @@ Where the host lets you set a subagent's model, route by task shape per the cano
 - `Explore` reads, file sweeps, parallel test runs → **cheap** tier.
 - Well-specified multi-file fixes against exact instructions → **mid** tier.
 - Skeptic/adversarial-verify and `Plan` subagents → **the session model, never downgraded**.
-- Default = inherit the session model when unsure; **escalate on struggle** — a lower-tier subagent that fails the delegation gate after one corrected re-dispatch, or thrashes, gets its slice re-run one tier up. When running under `/fable-it`, log every tier choice and escalation to `.taskstate/run-memory.md`; standalone, note them in the RESULT summary.
+- Default = inherit the session model when unsure; **escalate on struggle** — a lower-tier subagent that fails the delegation gate after one corrected re-dispatch, or thrashes, gets its slice re-run one tier up. When running under `/build-it`, log every tier choice and escalation to `.taskstate/run-memory.md`; standalone, note them in the RESULT summary.
 
 ### What to keep for yourself
 
@@ -168,7 +168,7 @@ Stop iterating and report to the user when:
 
 ## Final Report Format
 
-**This report is a feeder.** Running under `/fable-it`, its findings flow into the conductor's unified report (statuses derived from the `evidence.md` ledger) — it never stands as a second verdict beside it. Standalone runs use the format directly.
+**This report is a feeder.** Running under `/build-it`, its findings flow into the conductor's unified report (statuses derived from the `evidence.md` ledger) — it never stands as a second verdict beside it. Standalone runs use the format directly.
 
 ```
 ## Results

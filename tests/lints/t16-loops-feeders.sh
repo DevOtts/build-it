@@ -4,8 +4,8 @@
 # table (no standalone second verdict).
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-IT="$REPO/plugins/fable-it/skills/iterate/SKILL.md"
-QA="$REPO/plugins/fable-it/skills/full-qa/SKILL.md"
+IT="$REPO/plugins/build-it/skills/iterate/SKILL.md"
+QA="$REPO/plugins/build-it/skills/full-qa/SKILL.md"
 fail=0
 for f in "$IT" "$QA"; do [ -f "$f" ] || { echo "FAIL: $f missing"; exit 1; }; done
 

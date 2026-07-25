@@ -1,6 +1,9 @@
-# fable-it run artifacts (generated per run — never commit)
-FABLE-IT-REPORT.md
+# build-it run artifacts (generated per run — never commit)
+BUILD-IT-REPORT.md
 SKILL-PUBLISH-REPORT.md
+.build-it-reports/
+# legacy (pre-v3.1.0 rename) run artifacts
+FABLE-IT-REPORT.md
 .fable-it-reports/
 .taskstate/
 *.credentials

@@ -1,8 +1,35 @@
 # Changelog
 
-All notable changes to fable-it are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[Semantic Versioning](https://semver.org/).
+All notable changes to build-it (formerly fable-it) are documented here. The
+format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
+versions follow [Semantic Versioning](https://semver.org/).
+
+## [3.1.0] — 2026-07-24
+
+**fable-it is now build-it.** What started as a single plugin ("make your model
+behave like Fable") grew into the build stage of the *-it lifecycle family —
+plan-it plans it, build-it builds it, review-it reviews it. The name now says
+what it does. Gates, run-state contract, and verifier protocol are unchanged.
+
+### Changed
+- Renamed the plugin, skill, marketplace entry, and repository from
+  `fable-it` to `build-it` (`plugins/fable-it/` → `plugins/build-it/`,
+  `skills/fable-it/` → `skills/build-it/`). GitHub redirects from
+  `DevOtts/fable-it` remain in place.
+- Retired the "Make your model behave like Fable" tagline for the lifecycle
+  positioning; the Fable-behavioral-contract research and sources are
+  unchanged and still linked from the README.
+- Report folder convention is now `.build-it-reports/`; a legacy
+  `.fable-it-reports/lessons.md` is still read for cross-run memory.
+- Hardened-mode hooks disable switch is now `BUILD_IT_HOOKS_DISABLED=1`; the
+  legacy `FABLE_IT_HOOKS_DISABLED=1` is still honored.
+
+### Kept for back-compat
+- `/fable-it`, "fable it" and "fable-it" remain trigger phrases on the skill,
+  and `fable-it` stays in the keywords, so existing prompts and muscle memory
+  keep routing here.
+- Historical artifacts (past reports, research docs, delivery/ planning docs,
+  earlier CHANGELOG entries) keep the old name — they are records, not docs.
 
 ## [3.0.1] — 2026-07-08
 

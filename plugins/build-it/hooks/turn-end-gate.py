@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""fable-it hardened mode — turn-end gate (Claude Code Stop hook).
+"""build-it hardened mode — turn-end gate (Claude Code Stop hook).
 
 Blocks ending a turn whose final paragraph is a promise/plan pattern while
 .taskstate/dod.md still shows unfinished DoD criteria. BLOCKED is a valid
 terminal state, not a promise. Fail-open: any script error allows the stop and
-logs to .taskstate/hooks.log. One-line disable: FABLE_IT_HOOKS_DISABLED=1.
+logs to .taskstate/hooks.log. One-line disable: BUILD_IT_HOOKS_DISABLED=1 (legacy FABLE_IT_HOOKS_DISABLED=1 also honored).
 """
 import json
 import os
@@ -69,7 +69,7 @@ def dod_unfinished():
 
 
 def main():
-    if os.environ.get("FABLE_IT_HOOKS_DISABLED") == "1":
+    if os.environ.get("BUILD_IT_HOOKS_DISABLED") == "1" or os.environ.get("FABLE_IT_HOOKS_DISABLED") == "1":
         return
     data = json.load(sys.stdin)
     if data.get("stop_hook_active"):
@@ -84,7 +84,7 @@ def main():
     is_promise = any(re.search(p, last_para, re.IGNORECASE) for p in PROMISE_PATTERNS)
     if is_promise and dod_unfinished():
         reason = (
-            "Turn-end gate (fable-it hardened mode): the final paragraph is a "
+            "Turn-end gate (build-it hardened mode): the final paragraph is a "
             "promise/plan but .taskstate/dod.md shows unfinished DoD criteria. "
             "Execute the promised work now with tool calls, or report BLOCKED "
             "with the reason. Never end a turn on a promise."
