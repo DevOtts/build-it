@@ -4,6 +4,19 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [3.2.0] — 2026-10-14
+
+do-it integration (companion-change catalog, `build-it` section).
+
+### Changed
+- `.build-it-reports/` stays the only report folder; `.fable-it-reports/` is
+  declared legacy read-only (read for lessons, never created or written) in
+  both `SKILL.md` and the plugin copy (catalog id `report-dir-build-it`).
+- Plugin-copy skill now states that "reach every DoD item" never overrides a
+  conductor ceiling: a `CEILING_BLOCKED` step waits for a handoff.
+- Marketplace pin for `prompt-it` 0.2.1 -> 0.3.0 (catalog id `pin-build-it`).
+- Root `SKILL.md` frontmatter version synced to 3.2.0.
+
 ## [3.1.1] — 2026-07-25
 
 Brand-asset follow-up to the v3.1.0 rename: the files were renamed then; now
