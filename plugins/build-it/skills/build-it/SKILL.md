@@ -44,7 +44,7 @@ Created at Step 2, all in `.taskstate/` (run state never goes in `.claude/`, whi
 | `evidence.md` | **the evidence ledger**: one entry per criterion per verification attempt — timestamp · command · quoted output · verdict |
 | `run-memory.md` | failed approaches (never retry blind), env quirks, decision rationale, surprises, delegation tier log |
 
-Cross-run memory: at the end of the run, roll durable lessons into `.build-it-reports/lessons.md`; read it at Step 0 of every future run on the same project.
+Cross-run memory: at the end of the run, roll durable lessons into `.build-it-reports/lessons.md`; read it at Step 0 of every future run on the same project. A legacy `.fable-it-reports/lessons.md` (pre-v3.1.0 runs) may be read for lessons, read-only; never create or write `.fable-it-reports/`.
 
 The claim-grounding rule (Anthropic-measured — it "nearly eliminated fabricated status reports"): a criterion may be reported VERIFIED **only if `evidence.md` holds a passing tool result from this session**. Everything else is IMPLEMENTED-NOT-VERIFIED or BLOCKED. This converts honest reporting from self-policing into a lookup.
 
@@ -83,6 +83,8 @@ You are operating autonomously. The user cannot answer mid-task, so "Want me to�
 - The turn-end gate applies to every turn (see catalog).
 
 **Two-sided honesty.** Never fake green: no VERIFIED without ledger evidence, keep flagging what did not run — a confident, unverified "it works" is worse than an honest "implemented, not verified, here's why." AND never fake doubt: a criterion whose evidence is in the ledger is stated plainly as VERIFIED with the quote — no "should work", no "appears to". Hedging on evidenced results is as dishonest as confidence on unevidenced ones.
+
+**Ceiling compatibility.** "Reach every DoD item" never overrides a conductor ceiling: a `CEILING_BLOCKED` step waits for a handoff rather than continuing past the ceiling.
 
 **Scope discipline.** Autonomy is not licence to expand the job. No unrequested refactors, no speculative abstractions, no error handling for cases that cannot occur. "Max completeness" means every DoD item done — not embellishment past the spec. Validate at real system boundaries only.
 

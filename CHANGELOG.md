@@ -4,6 +4,30 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.0.0] — 2026-10-14
+
+Major release: build-it moves to 4.0.0 together with the rest of the *-it lifecycle
+family (prompt-it 1.0.0, plan-it 5.0.0, review-it 2.0.0, conclude-it 2.0.0,
+parallel-lifecycle 1.0.0). No behavior change beyond 3.2.0.
+
+### Changed
+- Version bump in `plugin.json`, `marketplace.json` (metadata and plugin entry) and
+  root `SKILL.md` frontmatter.
+- Marketplace pin for `prompt-it` 0.3.0 -> 1.0.0 (exact).
+
+## [3.2.0] — 2026-10-14
+
+do-it integration (companion-change catalog, `build-it` section).
+
+### Changed
+- `.build-it-reports/` stays the only report folder; `.fable-it-reports/` is
+  declared legacy read-only (read for lessons, never created or written) in
+  both `SKILL.md` and the plugin copy (catalog id `report-dir-build-it`).
+- Plugin-copy skill now states that "reach every DoD item" never overrides a
+  conductor ceiling: a `CEILING_BLOCKED` step waits for a handoff.
+- Marketplace pin for `prompt-it` 0.2.1 -> 0.3.0 (catalog id `pin-build-it`).
+- Root `SKILL.md` frontmatter version synced to 3.2.0.
+
 ## [3.1.1] — 2026-07-25
 
 Brand-asset follow-up to the v3.1.0 rename: the files were renamed then; now
