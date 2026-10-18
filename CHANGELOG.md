@@ -4,6 +4,40 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.1.1] — 2026-10-18
+
+Patch release. The first real run of the harness on a 23-epic, 5-wave program showed that review
+checkpoints serialized the waves, and a review of the checkpoint reader found a way to pass a
+checkpoint with a contradictory verdict file.
+
+### Added
+- `checkpoints.mjs gate --action start|promote|merge|release [--slice <id>]`: asks whether an action
+  may go ahead now. A checkpoint holds only what its `gates` name, for the work it `covers`: a wave
+  checkpoint holds the slices that depend (directly or through other slices) on the reviewed wave and
+  the promotion of that wave's work, and never holds independent work. Exit 0 allowed, 2 blocked
+  with every unmet checkpoint named, 1 cannot evaluate.
+- Older READINESS files (no `gates` or `covers`) are read with the corrected meaning, so a plan
+  written by plan-it 5.1.0 stops locking the next wave without being regenerated.
+
+### Changed
+- `check` and `plan` describe what a checkpoint holds instead of "start of the next wave".
+- The build-it skill no longer says a missing verdict stops the whole next wave. A run keeps working
+  on every slice that is ready; `status` still exits 0 only when every checkpoint is PASS, so the run
+  still closes only then.
+
+### Fixed
+- Verdict reader: 4.1.0 took the first `verdict:` line anywhere in the file, so a file with `PASS`
+  and later `FAIL` passed a checkpoint. It now ignores fenced and indented code and HTML comments,
+  needs exactly one overall verdict (a repeated PASS is fine), and treats PASS together with FAIL,
+  an overall PASS over a task that is not PASS, a lowercase `pass`, or any value other than
+  PASS/FAIL as not a pass. A verdict naming another checkpoint is not a pass either.
+- `depends_on`, `covers` and `gates` must be lists of strings, and a cycle in `depends_on` is
+  reported as a plan error (exit 1, with the cycle printed) instead of blocking quietly.
+
+### Known limits
+- To resolve a wave id in `covers`, `gate` needs each slice to carry its `wave`. plan-it 5.1.1 writes
+  it; a READINESS without it makes `gate` exit 1 and say so for any slice that has dependencies.
+
 ## [4.1.0] — 2026-10-18
 
 Minor release. build-it now keeps a machine-readable `status.json` per implementation, through
