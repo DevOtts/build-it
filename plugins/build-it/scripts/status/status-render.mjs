@@ -61,7 +61,7 @@ export function renderStatusMd(doc, view) {
   if (errs.length) lines.push(`Progress: not trustworthy (status.json fails validation: ${errs.length} error(s); run status-write validate)`);
   else lines.push(`Progress: ${progress}${v.approximate ? ' (approximate)' : ''}`);
   lines.push(
-    `Tasks: ${v.total ?? 0} · verified ${c('verified')} · done ${c('done')} · ` +
+    `Tasks: ${v.total ?? 0} · verified ${c('verified')} (claims) · done ${c('done')} · ` +
       `in-progress ${c('in-progress')} · blocked ${c('blocked')} · not-started ${c('not-started')}`,
   );
   lines.push(`Updated: ${flat(d.updated_at)}`);
@@ -73,6 +73,15 @@ export function renderStatusMd(doc, view) {
     blockedList.length === 0
       ? NONE
       : blockedList.map((b) => `- ${flat(b.id)} ${flat(b.title)} — blocked on: ${flat(b.blocked_on)}`).join('\n'),
+  ));
+  lines.push('');
+
+  const claims = Array.isArray(v.claims) ? v.claims : [];
+  lines.push(section(
+    'Verified claims',
+    claims.length === 0
+      ? NONE
+      : claims.map((k) => `- ${flat(k.id)} claimed by ${flat(k.by ?? 'unknown')} · verdict ${k.evidence ? '`' + flat(k.evidence) + '`' : '—'} · at ${flat(k.at ?? 'unknown')} · sha ${flat(k.sha ?? 'unreadable')}`).join('\n'),
   ));
   lines.push('');
 

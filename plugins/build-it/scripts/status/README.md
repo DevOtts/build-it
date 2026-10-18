@@ -49,6 +49,10 @@ status-write render   --file F [--out P] [--force]
 - `view` prints `INVALID` with the errors and exits 1 when the file fails validation; `render` refuses an invalid file.
 - Residual risk: `--by` cannot authenticate the caller. It is a guardrail, not a security boundary. Anyone who can run the writer as review-it, or write a verdict-shaped file plus a matching history entry by hand, can still fake `verified`; deleting a never-started task together with nothing else is not detectable from the file alone.
 
+## Verified is a claim
+
+The writer cannot authenticate `--by`, and there are no signing keys: any key on the machine is readable by the same agent. So readers never present `verified` as proof. `view`, `view --json` (`claims[]`) and the rendered STATUS.md label the count `verified N (claims)` and list, for each verified task, who claimed it, the verdict path, when, and a short sha256 of the verdict file as it reads now. If the sha changes, the verdict was edited after the claim. Re-running the Test Contract on demand is planned for a later release.
+
 ## Callers
 
 | Plugin | Commands it calls |

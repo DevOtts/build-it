@@ -71,7 +71,7 @@ test('ST-06 title heading uses title, falls back to implementation', () => {
 test('ST-06 percent and counts lines match the view', () => {
   const out = lines(renderStatusMd(makeDoc(), makeView({ percent: 62 })));
   assert.ok(out.includes('Progress: 62%'));
-  assert.ok(out.includes('Tasks: 2 · verified 1 · done 0 · in-progress 0 · blocked 1 · not-started 0'));
+  assert.ok(out.includes('Tasks: 2 · verified 1 (claims) · done 0 · in-progress 0 · blocked 1 · not-started 0'));
   assert.ok(out.includes('Updated: 2026-10-15T14:02:11Z'));
 });
 

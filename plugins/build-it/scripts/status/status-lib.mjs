@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 
 export const SCHEMA_VERSION = 1;
 export const STATUSES = ['not-started', 'in-progress', 'blocked', 'done', 'verified'];
@@ -300,6 +301,7 @@ export function computeView(doc, opts = {}) {
   for (const t of tasks) if (Object.hasOwn(counts, t.status)) counts[t.status] += 1;
   const blocked_list = tasks.filter((t) => t.status === 'blocked').map((t) => ({ id: t.id, title: t.title, blocked_on: t.blocked_on }));
   const newest = opts.newestActivity !== undefined ? opts.newestActivity : (opts.dir ? newestActivity(opts.dir, doc) : null);
+  const repoRoot = opts.repoRoot ?? (opts.dir ? resolveRepoRoot(opts.dir) : null);
   return {
     percent: percent(doc),
     approximate: doc.approximate === true,
@@ -307,9 +309,21 @@ export function computeView(doc, opts = {}) {
     counts,
     total: tasks.length,
     blocked_list,
+    claims: tasks.filter((t) => t.status === 'verified').map((t) => claimOf(doc, t, repoRoot)),
     stale: isStale(doc.updated_at, newest, opts.thresholdMs ?? STALE_THRESHOLD_MS),
     errors: validate(doc, { dir: opts.dir, repoRoot: opts.repoRoot }).errors,
   };
+}
+
+// D-28: `verified` is a claim by the role that wrote it, not a proof (the writer cannot authenticate --by).
+// Readers show who claimed it, the verdict path, when, and a short sha256 of the verdict as read now.
+export function claimOf(doc, task, repoRoot) {
+  const h = Array.isArray(doc.history) ? doc.history.filter((e) => isObj(e) && e.task === task.id && e.to === 'verified').pop() : null;
+  let sha = null;
+  if (repoRoot && typeof task.evidence === 'string') {
+    try { sha = crypto.createHash('sha256').update(fs.readFileSync(path.resolve(repoRoot, task.evidence))).digest('hex').slice(0, 12); } catch { sha = null; }
+  }
+  return { id: task.id, by: h ? h.by : null, at: h ? h.at : null, evidence: task.evidence ?? null, sha };
 }
 
 export function loadView(file, opts = {}) {

@@ -338,7 +338,8 @@ function cmdView(file, flags) {
   // An invalid file's percent is not trustworthy: say so on the same line, list the errors, exit 1 (ST-08).
   const pct = invalid ? `${view.percent}${view.percent === 'unknown' ? '' : '%'} INVALID (${view.errors.length} validation error(s); this percent is not trustworthy)` : `${view.percent}${view.percent === 'unknown' ? '' : '%'}`;
   say(`${oneLine(doc.implementation)}: ${pct}${view.approximate ? ' approximate' : ''}${view.stale ? ' (stale)' : ''}${view.closed ? ' [closed]' : ''}`);
-  say(STATUSES.map((s) => `${s} ${c[s]}`).join(' | ') + ` | total ${view.total}`);
+  say(STATUSES.map((s) => `${s} ${c[s]}${s === 'verified' ? ' (claims)' : ''}`).join(' | ') + ` | total ${view.total}`);
+  for (const k of view.claims) say(`claimed by ${oneLine(k.by ?? 'unknown')}: ${oneLine(k.id)} · verdict ${oneLine(k.evidence ?? 'none')} · at ${oneLine(k.at ?? 'unknown')} · sha ${k.sha ?? 'unreadable'}`);
   for (const b of view.blocked_list) say(`blocked ${oneLine(b.id)}: ${oneLine(b.blocked_on)}`);
   for (const e of view.errors) say(`invalid: ${oneLine(e)}`);
   return invalid ? 1 : 0;
