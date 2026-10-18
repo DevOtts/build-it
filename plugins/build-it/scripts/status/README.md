@@ -39,7 +39,7 @@ status-write render   --file F [--out P] [--force]
 - `--by` is required on mutating commands. Roles: plan-it (init, rename/remove not-started), build-it (not-started, in-progress, blocked, done, owner, pieces), review-it (verified, in-progress), conclude-it (close, reopen, session end, verified carry-forward), init-it (session add/end).
 - `done` needs evidence: repo-relative, no `..`, no symlink out of the repo, a regular non-empty file with non-whitespace content, under the implementation folder or a `.taskstate/` dir. `blocked` needs `--blocked-on`.
 - `verified` additionally needs a review-it verdict file: it contains `review-it`, the task id, and a `verdict: PASS` (or `result: VERIFIED`) line.
-- Lowering `verified` needs `--note`. Every status change appends `history` `{at, task, from, to, by, note}`. `updated_at` comes from the clock.
+- Lowering `verified` needs `--note`. `init` (and `init --merge` for tasks it adds) appends a `created` entry per new task: `{from: not-started, to: not-started, by: plan-it, note: created}`. Every status change appends `history` `{at, task, from, to, by, note}`. `updated_at` comes from the clock.
 - Forbidden keys (`percent`, `counts`, `computed`, `blocked_list`, `stale`) are rejected naming the key. Unknown other keys are preserved.
 - After `close` the file is frozen until `reopen`. Lock: `status.json.lock` (`wx`, stale after 30 s or when the holder pid is dead). Write: tmp, fsync, rename. Test hook `STATUS_WRITE_TEST_CRASH=after-tmp` exits 137 before the rename (test-only).
 - After each successful write `status-render.mjs` (if installed) re-renders STATUS.md, only when the target is absent or starts with the generated marker line. Hand-written boards are never overwritten (`render --force` overrides).

@@ -17,7 +17,7 @@ test('AT-13 / T-B-14 concurrent writers: valid file, every change present (10 ro
       assert.equal(s.task(id).status, 'in-progress', `${id} present`);
       assert.equal(s.task(id).owner, owner);
     }
-    assert.equal(doc.history.length, 6);
+    assert.equal(doc.history.filter((h) => h.note !== 'created').length, 6);
     assert.equal(s.w(['validate']).code, 0);
     assert.deepEqual(s.residue(), []);
   }
