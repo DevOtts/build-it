@@ -8,7 +8,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import {
   SCHEMA_VERSION, STATUSES, ROLES, SESSION_ROLES, FORBIDDEN_KEYS, RENDER_MARKER,
   validate, computeView, checkEvidence, resolveRepoRoot, resolveStatusFile,
-  withLock, writeAtomic, nowIso, allTasks, newestActivity, movedEvidence,
+  withLock, writeAtomic, nowIso, allTasks, newestActivity,
   checkShapeError, normalizeCheck, sameCheck, RECHECK_KEEP_PER_TASK,
 } from './status-lib.mjs';
 import {
@@ -228,8 +228,11 @@ async function cmdSet(file, pos, flags) {
     const to = flags.status || t.status; const from = t.status;
     if (from === 'verified' && to !== 'verified' && !nonEmpty(flags.note)) throw new Refusal('lowering a verified task requires --note', 1);
     if (to === 'blocked' && !nonEmpty(flags['blocked-on'])) throw new Refusal('blocked requires --blocked-on', 1);
-    if (to === 'done' || to === 'verified') {
-      const ev = flags.evidence ?? movedEvidence(root, dir, t.evidence);
+    if (flags.status && (to === 'done' || to === 'verified')) {
+      // Every write into done/verified carries its own evidence; stored evidence is never reused (a task sent back
+      // by review-it must not return to done/verified on the verdict from before the failure).
+      if (!nonEmpty(flags.evidence)) throw new Refusal(`${to} refused: ${id} needs an explicit --evidence <path> (stored evidence is not reused)`, 1);
+      const ev = flags.evidence;
       const c = checkEvidence(root, dir, ev, to === 'verified' ? { verdictFor: id } : {});
       if (!c.ok) throw new Refusal(`${to} refused: ${c.reason}`, 1);
       t.evidence = ev;
