@@ -31,6 +31,7 @@ Check each gate at its decision point — they are self-audits, not standing exh
 - **Interlock gate** (safe parallel) — trigger: at run start, and before spawning any parallel *mutating* agent · test: does `.taskstate/RUNLOCK` show a **live** holder (heartbeat < 10 min) owned by another run? · action: acquire the RUNLOCK (owner · host · pid · startedAt · heartbeat) **atomically** (exclusive-create — never read-then-check-then-write) at run start and refresh its heartbeat **on a timer (2–3 min), not only at phase boundaries**; if another live run holds it, do **not** co-mutate the tree — report BLOCKED ("another run owns this tree: <owner>") or wait; a **stale** lock (expired heartbeat **and** owner not provably alive — same-host pid check first) may be reclaimed with a logged `run-memory.md` note; release on the stop-hook. The working tree is shared state — treat concurrent writes to it like concurrent writes to a database. See `references/parallel-safety.md`.
 - **Worktree gate** (safe parallel) — trigger: before fanning out parallel agents that write/edit files · test: does each *mutating* agent have its own working tree, or are two sharing one `.git`? · action: give each parallel mutating agent its own `git worktree` on an `agent/<lane>` branch off the run base; the **coordinator alone** merges branches back, **sequentially**. Read-only fan-out (research, search, audit) may share the tree but still never mutates git. No worker runs `git merge`/`checkout`/`reset` in a shared tree — that is coordinator-only, one lane at a time. See `references/parallel-safety.md`.
 - **Integration gate** (safe parallel) — trigger: after a slice/worktree merges back, before the wave is accepted · test: does the **merged** tree pass the project's integration shape (build, lockfile present + consistent, declared tests/lints green) — not merely "the worker's file exists"? · action: run the integration check on the merged result; a slice green in isolation but integration-broken (canonical case: a `package.json` added with no lockfile) is **reopened, not accepted**. Acceptance is integration, not existence. See `references/parallel-safety.md`.
+- **Status-boundary gate** — trigger: entering or leaving any task (start, block, unblock, finish) in a run whose package has a `status.json` · test: did the status writer exit 0 for *this* boundary? · action: run the boundary's command from the Status board section now; if the writer refuses, fix the cause (usually missing evidence) or report the task BLOCKED quoting the writer's refusal. A task finished without a write counts as not finished.
 
 ## The run-state contract
 
@@ -47,6 +48,28 @@ Cross-run memory: at the end of a run, roll durable lessons into `.build-it-repo
 
 **The claim-grounding rule:** a criterion may be reported VERIFIED **only if `evidence.md` holds a passing result from this session**. Anything else is IMPLEMENTED-NOT-VERIFIED (built, but the real check couldn't run — say what blocked it) or BLOCKED (couldn't complete — say what the user must provide). Never VERIFIED on a mock, an assumption, or memory.
 
+## Status board (status.json)
+
+Applies when the run's implementation package has a `status.json` (written by plan-it). Resolve it once while pre-grounding and record the path in `grounding.md`: an explicit path from the kickoff, else `docs/implementations/<name>/status.json`, else the singular `docs/implementation/<name>/status.json`. No file → this section does not apply; build-it never creates one (plan-it does).
+
+Every edit goes through the single writer. Set `W` to the writer's repo path, `plugins/build-it/scripts/status/status-write.mjs` in the build-it checkout, and `F=<path to status.json>`, then at each task boundary run (the status-boundary gate checks it):
+
+```
+start    node "$W" set <ID> --status in-progress --owner build-it:<tier> --by build-it --file "$F"
+block    node "$W" set <ID> --status blocked --blocked-on "<who/what>" --by build-it --file "$F"
+unblock  node "$W" set <ID> --status in-progress --by build-it --file "$F"
+finish   node "$W" set <ID> --status done --evidence <evidence> --by build-it --file "$F"
+piece    node "$W" piece "<piece>" --status <status> --whats-left "<one line>" --by build-it --file "$F"
+report   node "$W" view --file "$F"
+```
+
+- `<ID>` is the task id exactly as in `status.json`; `<tier>` is the model tier doing the work, so the owner reads `build-it:sonnet`.
+- `<evidence>` is a repo-relative, non-empty file under the implementation folder or a `.taskstate/` dir — the test output or result log that backs the task. No such file yet → the task is not finished; do not write `done`.
+- Write at the boundary, not at the end of the run. A task finished without a write counts as not finished. Refresh the task's `piece` row after its finish (`whats_left` is one plain line, never a percent).
+- In parallel runs the coordinator makes every write against the one `status.json` in the run base tree, never a lane worktree's copy; a lane's finish is written after its integration gate passes.
+- Never write `verified` (review-it's), never hand-edit `status.json` or `STATUS.md` (the writer re-renders it), never type a percent. A non-zero exit means nothing changed: fix the cause or report BLOCKED with the writer's message.
+- `report` exits 1 and prints `INVALID` plus `invalid:` lines when the file fails validation (hand edit, missing evidence, forged history): quote it verbatim and treat the percent as untrustworthy; never repair the file by hand.
+
 ## The run
 
 1. **Lock the DoD.** Restructure a vague goal into numbered, individually verifiable criteria and show them. Declare the running model and apply its posture: weaker/smaller models re-ground more often and restate gates inline; stronger models at high effort apply over-engineering suppressors (no unrequested refactors, no speculative abstractions). Assume the strictest posture when unsure. **Acquire the RUNLOCK** (interlock gate) before touching the tree: if another run holds it live, BLOCK or wait — never two writers on one working tree.
@@ -62,7 +85,7 @@ Before delivery, audit the draft report as a separate pass. State explicitly: "s
 
 ## The report
 
-One verdict source. Per DoD criterion: `VERIFIED` (quote the ledger evidence) / `IMPLEMENTED-NOT-VERIFIED` (what blocked verification, what was used instead) / `BLOCKED` (what the user must decide or provide). Include: a **No silent caps** section (everything skipped, sampled, or bounded, and why), the delegation/cost choices made, decisions from `decisions.md`, surprises, and recommended next actions. Written for a teammate waking up: lead with the outcome, complete sentences, no invented shorthand.
+One verdict source. Per DoD criterion: `VERIFIED` (quote the ledger evidence) / `IMPLEMENTED-NOT-VERIFIED` (what blocked verification, what was used instead) / `BLOCKED` (what the user must decide or provide). When the package has a `status.json`, include a **Status board** section quoting the `report` command's `status-write view` output verbatim — never a typed percent. Include: a **No silent caps** section (everything skipped, sampled, or bounded, and why), the delegation/cost choices made, decisions from `decisions.md`, surprises, and recommended next actions. Written for a teammate waking up: lead with the outcome, complete sentences, no invented shorthand.
 
 ## Install
 

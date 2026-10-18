@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DevOtts/build-it/status.schema.json",
+  "title": "status.json schema 1",
+  "description": "Machine-readable implementation progress. Written only by status-write. Computed values (percent, counts, computed, blocked_list, stale) must never appear.",
+  "type": "object",
+  "required": ["schema", "implementation", "updated_at", "waves", "sessions", "pieces", "history"],
+  "properties": {
+    "schema": { "const": 1 },
+    "implementation": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "updated_at": { "$ref": "#/$defs/isoUtc" },
+    "approximate": { "type": "boolean" },
+    "closed": { "type": "boolean" },
+    "waves": { "type": "array", "items": { "$ref": "#/$defs/wave" } },
+    "sessions": { "type": "array", "items": { "$ref": "#/$defs/session" } },
+    "pieces": { "type": "array", "items": { "$ref": "#/$defs/piece" } },
+    "history": { "type": "array", "items": { "$ref": "#/$defs/historyEntry" } }
+  },
+  "not": { "$ref": "#/$defs/forbidden" },
+  "additionalProperties": true,
+  "$defs": {
+    "isoUtc": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$" },
+    "status": { "enum": ["not-started", "in-progress", "blocked", "done", "verified"] },
+    "forbidden": {
+      "anyOf": [
+        { "required": ["percent"] }, { "required": ["counts"] }, { "required": ["computed"] },
+        { "required": ["blocked_list"] }, { "required": ["stale"] }
+      ]
+    },
+    "wave": {
+      "type": "object",
+      "required": ["id", "title", "tasks"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" } }
+      },
+      "not": { "$ref": "#/$defs/forbidden" },
+      "additionalProperties": true
+    },
+    "task": {
+      "type": "object",
+      "required": ["id", "title", "status", "updated_at"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "blocked_on": { "type": ["string", "null"] },
+        "evidence": { "type": ["string", "null"] },
+        "owner": { "type": ["string", "null"] },
+        "updated_at": { "$ref": "#/$defs/isoUtc" },
+        "note": { "type": ["string", "null"] }
+      },
+      "not": { "$ref": "#/$defs/forbidden" },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "blocked" } }, "required": ["status"] },
+          "then": { "required": ["blocked_on"], "properties": { "blocked_on": { "type": "string", "pattern": "\\S" } } }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["done", "verified"] } }, "required": ["status"] },
+          "then": { "required": ["evidence"], "properties": { "evidence": { "type": "string", "pattern": "\\S" } } }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "session": {
+      "type": "object",
+      "required": ["session_id", "alias", "name", "role", "started_at"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "alias": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "enum": ["plan", "build", "review", "conclude", "other"] },
+        "started_at": { "$ref": "#/$defs/isoUtc" },
+        "ended_at": { "oneOf": [{ "$ref": "#/$defs/isoUtc" }, { "type": "null" }] }
+      },
+      "additionalProperties": true
+    },
+    "piece": {
+      "type": "object",
+      "required": ["piece", "status", "whats_left"],
+      "properties": {
+        "piece": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "blocked_on": { "type": ["string", "null"] },
+        "whats_left": { "type": "string", "not": { "pattern": "\\d\\s*%" } }
+      },
+      "not": { "$ref": "#/$defs/forbidden" },
+      "additionalProperties": true
+    },
+    "historyEntry": {
+      "type": "object",
+      "required": ["at", "task", "from", "to", "by"],
+      "properties": {
+        "at": { "type": "string" },
+        "task": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "by": { "type": "string" },
+        "note": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  }
+}
