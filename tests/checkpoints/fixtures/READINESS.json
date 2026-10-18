@@ -1,0 +1,85 @@
+{
+  "schema": "do-it-readiness/1",
+  "decisions": [
+    {
+      "id": "D1",
+      "status": "RESOLVED"
+    }
+  ],
+  "preflight": {
+    "passed": true
+  },
+  "owner_dependent_slices": 0,
+  "review_checkpoints": {
+    "schema": "review-checkpoints/1",
+    "policy": "CHECKPOINT-POLICY v1",
+    "inputs": {
+      "tasks": 9,
+      "epics": 1,
+      "waves": [
+        "W1",
+        "W2",
+        "W3"
+      ],
+      "flags": {
+        "cross_cutting": "one shared writer (status-write) called by plan-it, build-it, review-it and conclude-it; ST-03 touches the build-it run loop",
+        "owner_gated": null,
+        "new_surface": "new status.json schema 1, the status-write CLI and the /doit-status mod",
+        "data": "status.json is the persisted source of truth for progress; a bad write shows a fake percent to the owner",
+        "money": null,
+        "security": null,
+        "prod_facing": "ships inside the plan-it and build-it plugins that every session loads"
+      }
+    },
+    "score": {
+      "size": 1,
+      "complexity": 2,
+      "importance": 2,
+      "total": 5
+    },
+    "level": "heightened",
+    "count": 5,
+    "checkpoints": [
+      {
+        "id": "CP-01",
+        "kind": "wave",
+        "at": "after W1",
+        "review": "contract cases of the finished waves, on the merged tree",
+        "blocks": "start of W2",
+        "evidence": "plan/reviews/CP-01-wave-w1.md"
+      },
+      {
+        "id": "CP-02",
+        "kind": "wave",
+        "at": "after W2",
+        "review": "contract cases of the finished waves, on the merged tree",
+        "blocks": "start of W3",
+        "evidence": "plan/reviews/CP-02-wave-w2.md"
+      },
+      {
+        "id": "CP-03",
+        "kind": "adversarial",
+        "at": "after W3, before pre-merge",
+        "review": "adversarial: try to get a false pass through every gate and writer",
+        "blocks": "pre-merge",
+        "evidence": "plan/reviews/CP-03-adversarial.md"
+      },
+      {
+        "id": "CP-04",
+        "kind": "pre-merge",
+        "at": "before merge to main",
+        "review": "the whole Test Contract on the integrated branch",
+        "blocks": "merge to main",
+        "evidence": "plan/reviews/CP-04-pre-merge.md"
+      },
+      {
+        "id": "CP-05",
+        "kind": "pre-release",
+        "at": "after merge, before tag, publish or deploy",
+        "review": "deploy-verify plus the [REAL] cases on the released artifact",
+        "blocks": "tag, publish or deploy",
+        "evidence": "plan/reviews/CP-05-pre-release.md"
+      }
+    ]
+  }
+}

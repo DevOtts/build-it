@@ -139,6 +139,8 @@ During cycles, the catalog gates run continuously: **claim gate** — every veri
 
 Run cycles until every criterion is VERIFIED in the ledger or reasonable approaches are exhausted. Track progress in `.taskstate/`; if infra fails mid-run (API 529, disconnect), resume from `.taskstate/` — never let infra failure masquerade as task failure.
 
+**Review checkpoints** (when the plan has `plan/READINESS.json`). plan-it decides how many review-it checkpoints this implementation gets and where they sit (`review_checkpoints`, scaled by size, complexity and importance); build-it never changes the count. Set `C=${CLAUDE_PLUGIN_ROOT}/scripts/checkpoints/checkpoints.mjs`. At Step 2 run `node "$C" plan --readiness plan/READINESS.json` and copy its output into `grounding.md`. At every wave boundary, and before the adversarial pass, the merge and the release, run `node "$C" due --at <W1|adversarial|pre-merge|pre-release>`; for each DUE line invoke `/review-it` on that scope and have it write its report to the named verdict path with a `checkpoint: CP-NN` line and a `verdict: PASS|FAIL` line. Then `node "$C" check --id CP-NN`: exit 0 lets you cross; exit 1 (FAIL) sends the failing cases back into the fix cycle, then re-run the same checkpoint; exit 2 (no verdict) means you may not cross. Before Step 6, `node "$C" status` must exit 0, or each non-PASS checkpoint is listed in the report as a blocker. No block in READINESS.json (an older plan) → run the one pre-merge checkpoint the script names and say so in the report.
+
 ## Step 6 — Draft the unified report
 
 One report format. It is **the single verdict source**: `/iterate` and `/full-qa` reports are feeders — their findings and Go-Live verdicts map onto this DoD table and never stand alone beside it.
