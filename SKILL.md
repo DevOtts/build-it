@@ -1,7 +1,7 @@
 ---
 name: build-it
 description: 'Autonomous goal-to-DoD delivery orchestrator — the build stage of the *-it lifecycle ("plan-it plans it, build-it builds it"); formerly named fable-it. Hand it a goal and a numbered Definition of Done and it runs the whole job to completion, typically unattended, enforcing checkable gates (turn-end, claim, state-change, phase-boundary, delegation, and safe-parallel: interlock, worktree, integration), disk-backed run state, an evidence ledger that makes VERIFIED a lookup, a fresh-eyes verification pass, and an honest per-criterion report. Model-adaptive for Sonnet 5 and Opus 4.8; host-agnostic (Claude Code, Cursor, Codex, Copilot and any SKILL.md-compatible agent).'
-version: 3.1.0
+version: 4.0.0
 license: MIT
 author: DevOtts
 author_url: https://github.com/DevOtts
@@ -43,7 +43,7 @@ Create these four files in `.taskstate/` before writing any code, and re-read th
 | `evidence.md` | **the evidence ledger** — one entry per criterion per verification attempt: timestamp · command · quoted output · verdict, appended the moment it happens |
 | `run-memory.md` | failed approaches (never retry blind), environment quirks, decision rationale, surprises |
 
-Cross-run memory: at the end of a run, roll durable lessons into `.build-it-reports/lessons.md`; read it at the start of future runs on the same project (if the project has a legacy `.fable-it-reports/lessons.md` from pre-v3.1.0 runs, read that too).
+Cross-run memory: at the end of a run, roll durable lessons into `.build-it-reports/lessons.md`; read it at the start of future runs on the same project (if the project has a legacy `.fable-it-reports/lessons.md` from pre-v3.1.0 runs, read that too, read-only; never create or write `.fable-it-reports/`).
 
 **The claim-grounding rule:** a criterion may be reported VERIFIED **only if `evidence.md` holds a passing result from this session**. Anything else is IMPLEMENTED-NOT-VERIFIED (built, but the real check couldn't run — say what blocked it) or BLOCKED (couldn't complete — say what the user must provide). Never VERIFIED on a mock, an assumption, or memory.
 

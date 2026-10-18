@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "DevOtts plugins for Claude Code.",
-    "version": "3.1.1"
+    "version": "4.0.0"
   },
   "plugins": [
     {
@@ -15,7 +15,7 @@
         "source": "github",
         "repo": "DevOtts/prompt-it"
       },
-      "version": "0.2.1",
+      "version": "1.0.0",
       "description": "Harness-aware intent compiler for the DevOtts lifecycle family — turns a rough ask into an optimized, context-grounded prompt routed to the right *-it skill with exactly the slots that target parses, nothing it already owns. Mode 1 compiles new-session prompts from a simple ask; Mode 2 reads review-it/QA findings and generates the evidence-cited continuation prompt. Never emits tiering, persistence, or verification-protocol content the routed target already owns.",
       "author": {
         "name": "DevOtts",
@@ -36,7 +36,7 @@
       "name": "build-it",
       "source": "./plugins/build-it",
       "description": "Single-command autonomous delivery orchestrator — the build stage of the *-it lifecycle (plan-it plans it, build-it builds it); formerly fable-it. Model-adaptive for Sonnet 5 and Opus 4.8. Hand it a goal and a numbered Definition of Done and it runs the whole job to completion, conducting launch/iterate/full-qa/chrome-cdp with a 5-gate catalog, disk-backed run state, an evidence ledger (VERIFIED = lookup), a fresh-context verifier, and an honest per-criterion report.",
-      "version": "3.1.1",
+      "version": "4.0.0",
       "author": {
         "name": "DevOtts",
         "url": "https://github.com/DevOtts"
