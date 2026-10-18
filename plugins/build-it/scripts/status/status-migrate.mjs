@@ -302,7 +302,7 @@ export async function main(argv, io = { out: (s) => process.stdout.write(s + '\n
   if (lib && typeof lib.validate === 'function') {
     // validate against a staged copy so evidence paths resolve relative to the real folder
     let res;
-    try { res = lib.validate(doc, { dir: implDir }); } catch (e) { res = { errors: [`validate threw: ${e.message}`] }; }
+    try { res = lib.validate(doc, { dir: implDir, repoRoot }); } catch (e) { res = { errors: [`validate threw: ${e.message}`] }; }
     const errors = Array.isArray(res) ? res : res?.errors ?? [];
     if (errors.length) {
       io.err('migrated document failed validation; nothing written:');
@@ -311,17 +311,10 @@ export async function main(argv, io = { out: (s) => process.stdout.write(s + '\n
       return 1;
     }
   }
-  const text2 = JSON.stringify(doc, null, 2) + '\n';
   fs.mkdirSync(implDir, { recursive: true });
-  let wrote = false;
-  if (lib && typeof lib.writeAtomic === 'function') {
-    try {
-      await lib.writeAtomic(out, text2);
-      try { const back = JSON.parse(fs.readFileSync(out, 'utf8')); wrote = back && typeof back === 'object'; } catch { wrote = false; }
-      if (!wrote) { try { fs.rmSync(out, { force: true }); } catch { /* */ } }
-    } catch { wrote = false; }
-  }
-  if (!wrote) localWriteAtomic(out, text2);
+  // writeAtomic(file, doc) serializes the object itself (tmp + fsync + rename).
+  if (lib && typeof lib.writeAtomic === 'function') await lib.writeAtomic(out, doc);
+  else localWriteAtomic(out, JSON.stringify(doc, null, 2) + '\n');
   io.out(formatReport(report, { from: src, out }));
   return 0;
 }

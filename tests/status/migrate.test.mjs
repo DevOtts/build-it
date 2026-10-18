@@ -18,10 +18,13 @@ const DOIT_STATUS = `${DOIT}/delivery/STATUS.md`;
 const LENS_STATUS = '/Users/macbook/Workspace/ANM/docs/implementations/lens-data-honesty/delivery/STATUS.md';
 
 const mk = () => fs.mkdtempSync(path.join(os.tmpdir(), 'st07-'));
-function fixture(srcStatus, { copyEvidenceFrom = null, skip = [] } = {}) {
+// Layout: <root>/docs/implementations/<impl>/{status.json, delivery/STATUS.md}; status.json's folder
+// must equal the implementation name (validator rule), so the board sits under its impl folder.
+function fixture(srcStatus, { impl, copyEvidenceFrom = null, skip = [] } = {}) {
   const root = mk();
   fs.mkdirSync(path.join(root, '.git'));
-  const dir = path.join(root, 'delivery');
+  const implDir = path.join(root, 'docs', 'implementations', impl);
+  const dir = path.join(implDir, 'delivery');
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(srcStatus, path.join(dir, 'STATUS.md'));
   const copied = [];
@@ -37,7 +40,7 @@ function fixture(srcStatus, { copyEvidenceFrom = null, skip = [] } = {}) {
       }
     }
   }
-  return { root, dir, copied };
+  return { root, dir, implDir, out: path.join(implDir, 'status.json'), copied };
 }
 const cli = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
 const allTasks = (doc) => doc.waves.flatMap((w) => w.tasks);
@@ -47,9 +50,9 @@ const lensIt = fs.existsSync(LENS_STATUS) ? test : test.skip;
 
 doitIt('AT-20 / T-B-19 do-it STATUS.md', () => {
   // (a) evidence copied: everything that references an existing log keeps its status.
-  const fx = fixture(DOIT_STATUS, { copyEvidenceFrom: DOIT });
+  const fx = fixture(DOIT_STATUS, { impl: 'do-it-v1', copyEvidenceFrom: DOIT });
   assert.ok(fx.copied.includes('.taskstate/evidence.md'), `copied: ${fx.copied.join(', ')}`);
-  const out = path.join(fx.dir, 'status.json');
+  const out = fx.out;
   const r = cli(['--from', path.join(fx.dir, 'STATUS.md'), '--out', out, '--impl', 'do-it-v1']);
   assert.equal(r.status, 0, r.stderr);
   const doc = JSON.parse(fs.readFileSync(out, 'utf8'));
@@ -90,7 +93,7 @@ doitIt('AT-20 / T-B-19 do-it STATUS.md', () => {
 
 doitIt('AT-20 / T-B-19 do-it STATUS.md: every unevidenced VERIFIED is downgraded and reported', () => {
   // (b) fixture WITHOUT any evidence files: all 16 VERIFIED are unevidenced.
-  const fx = fixture(DOIT_STATUS);
+  const fx = fixture(DOIT_STATUS, { impl: 'do-it-v1' });
   const md = fs.readFileSync(path.join(fx.dir, 'STATUS.md'), 'utf8');
   const { doc, report } = migrate(md, { implementation: 'do-it-v1', repoRoot: fx.root, implDir: fx.dir });
   assert.equal(report.tasksFound, 20);
@@ -109,8 +112,8 @@ doitIt('AT-20 / T-B-19 do-it STATUS.md: every unevidenced VERIFIED is downgraded
 });
 
 lensIt('AT-21 lens-data-honesty', () => {
-  const fx = fixture(LENS_STATUS);
-  const out = path.join(fx.dir, 'status.json');
+  const fx = fixture(LENS_STATUS, { impl: 'lens-data-honesty' });
+  const out = fx.out;
   const r = cli(['--from', path.join(fx.dir, 'STATUS.md'), '--out', out, '--impl', 'lens-data-honesty']);
   assert.equal(r.status, 0, r.stderr);
   const doc = JSON.parse(fs.readFileSync(out, 'utf8'));
