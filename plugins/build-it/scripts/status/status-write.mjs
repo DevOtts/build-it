@@ -13,7 +13,7 @@ import {
 
 class Refusal extends Error { constructor(msg, code = 1) { super(msg); this.exitCode = code; } }
 
-const BOOL_FLAGS = new Set(['merge', 'json', 'force', 'end-sessions', 'move']);
+const BOOL_FLAGS = new Set(['merge', 'json', 'force', 'end-sessions', 'move', 'create']);
 const USAGE = `usage: status-write <init|set|piece|rename|remove|session|close|reopen|validate|view|render> [args] --file <status.json> [--by ROLE]
   see plugins/build-it/scripts/status/README.md`;
 
@@ -250,6 +250,14 @@ async function cmdRenameRemove(cmd, file, pos, flags) {
   say(`${cmd} ${id} ok`);
 }
 
+function buildMinimal(dir) {
+  const impl = path.basename(dir);
+  return {
+    schema: SCHEMA_VERSION, implementation: impl, title: impl, updated_at: nowIso(), approximate: false, closed: false,
+    waves: [], sessions: [], pieces: [], history: [], created_by: 'init-it',
+  };
+}
+
 async function cmdSession(file, pos, flags) {
   const sub = pos[0];
   const by = needBy(flags);
@@ -258,12 +266,20 @@ async function cmdSession(file, pos, flags) {
     allow(by, ['init-it'], 'session add');
     for (const k of ['session-id', 'alias', 'name', 'role']) if (!nonEmpty(flags[k])) throw new Refusal(`session add needs --${k}`, 2);
     if (!SESSION_ROLES.includes(flags.role)) throw new Refusal(`invalid --role (allowed: ${SESSION_ROLES.join(', ')})`, 1);
+    // --create (init-it only): a missing status.json is created as a minimal schema-1 board with no waves,
+    // flagged created_by: init-it, so a session can register before plan-it has written the plan.
+    if (flags.create) fs.mkdirSync(path.dirname(file), { recursive: true });
     r = await mutate(file, (doc) => {
-      if (!doc.sessions.some((s) => s.session_id === flags['session-id'])) {
+      if (!doc) doc = buildMinimal(path.dirname(file));
+      const existing = doc.sessions.find((s) => s.session_id === flags['session-id']);
+      if (!existing) {
         doc.sessions.push({ session_id: flags['session-id'], alias: flags.alias, name: flags.name, role: flags.role, started_at: nowIso(), ended_at: null });
+      } else if (existing.role !== flags.role) {
+        // Idempotent re-registration with another role updates the role in place; started_at is kept.
+        existing.role = flags.role;
       }
       return { doc };
-    });
+    }, { mustExist: !flags.create });
   } else if (sub === 'end') {
     allow(by, ['init-it', 'conclude-it'], 'session end');
     if (!nonEmpty(flags['session-id'])) throw new Refusal('session end needs --session-id', 2);
