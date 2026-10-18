@@ -202,6 +202,7 @@ export function validate(doc, opts = {}) {
         else future(t.updated_at, `${at}: updated_at`);
         for (const k of ['blocked_on', 'evidence', 'note']) if (t[k] != null && !isStr(t[k])) err(`${at}: ${k} must be a string or null`);
         if (t.owner != null && !isStr(t.owner)) err(`${at}: owner must be a string`);
+        if (t.check !== undefined) { const ce = checkShapeError(t.check); if (ce) err(`${at}: ${ce}`); }
         if (t.status === 'blocked' && !(isStr(t.blocked_on) && t.blocked_on.trim())) err(`${at}: blocked requires blocked_on`);
         if (t.status === 'done' || t.status === 'verified') {
           if (!(isStr(t.evidence) && t.evidence.trim())) err(`${at}: ${t.status} requires evidence`);
@@ -239,6 +240,18 @@ export function validate(doc, opts = {}) {
       else if (/\d\s*%/.test(p.whats_left)) err(`pieces[${i}].whats_left must not contain a percent`);
       if (p.blocked_on != null && !isStr(p.blocked_on)) err(`pieces[${i}].blocked_on must be a string or null`);
       if (p.status === 'blocked' && !(isStr(p.blocked_on) && p.blocked_on.trim())) err(`pieces[${i}]: blocked requires blocked_on`);
+    });
+  }
+  if (doc.rechecks !== undefined) {
+    if (!Array.isArray(doc.rechecks)) err('rechecks must be an array');
+    else doc.rechecks.forEach((r, i) => {
+      if (!isObj(r)) return err(`rechecks[${i}] must be an object`);
+      if (!isStr(r.task) || !r.task) err(`rechecks[${i}].task must be a non-empty string`);
+      if (!isStr(r.at) || !ISO_RE.test(r.at)) err(`rechecks[${i}].at must be an ISO 8601 UTC string`);
+      else future(r.at, `rechecks[${i}].at`);
+      if (!RECHECK_RESULTS.includes(r.result)) err(`rechecks[${i}].result must be one of ${RECHECK_RESULTS.join(', ')}`);
+      if (!isStr(r.sha) || !/^[0-9a-f]{7,64}$/.test(r.sha)) err(`rechecks[${i}].sha must be a git sha`);
+      if (!isStr(r.command_sha)) err(`rechecks[${i}].command_sha must be a string`);
     });
   }
   // A task that has history but is gone from the waves was deleted by hand (the writer records "removed").
@@ -310,6 +323,8 @@ export function computeView(doc, opts = {}) {
     total: tasks.length,
     blocked_list,
     claims: tasks.filter((t) => t.status === 'verified').map((t) => claimOf(doc, t, repoRoot)),
+    // R-1: what the last explicit `recheck` found. Reading the view never runs a check.
+    rechecks: recheckView(doc, opts.head !== undefined ? opts.head : (opts.dir ? gitHead(opts.dir) : null)),
     stale: isStale(doc.updated_at, newest, opts.thresholdMs ?? STALE_THRESHOLD_MS),
     errors: validate(doc, { dir: opts.dir, repoRoot: opts.repoRoot }).errors,
   };
@@ -335,6 +350,75 @@ export function loadView(file, opts = {}) {
     const view = computeView(doc, { dir: path.dirname(path.resolve(file)), ...opts });
     return view.error ? view : { ...view, doc };
   } catch (e) { return { error: `cannot compute view: ${e.message}` }; }
+}
+
+// ---------- check commands + re-checks (R-1) ----------
+// A task's `check` is copied from the committed plan at init: { kind: 'command', command, cases?, unchecked? }
+// or { kind: 'none', reason?, unchecked? }. The recheck runner always reads the command from the plan
+// committed at HEAD (<impl dir>/plan.json), never from status.json; status.json carries a copy for display
+// and tamper detection only.
+export const CHECK_KINDS = ['command', 'none'];
+export const RECHECK_RESULTS = ['pass', 'fail', 'timeout'];
+export const PLAN_FILE = 'plan.json';
+export const RECHECK_KEEP_PER_TASK = 10;
+
+// Returns null when ok, or a reason string.
+export function checkShapeError(c) {
+  if (!isObj(c)) return 'check must be an object';
+  if (!CHECK_KINDS.includes(c.kind)) return `check.kind must be one of ${CHECK_KINDS.join(', ')}`;
+  if (c.kind === 'command' && !(isStr(c.command) && c.command.trim())) return 'check.kind "command" needs a non-empty command string';
+  if (c.kind === 'none' && c.command !== undefined && c.command !== null) return 'check.kind "none" may not carry a command';
+  if (c.cases !== undefined && !(Array.isArray(c.cases) && c.cases.every(isStr))) return 'check.cases must be an array of strings';
+  if (c.unchecked !== undefined && !Array.isArray(c.unchecked)) return 'check.unchecked must be an array';
+  if (c.reason !== undefined && c.reason !== null && !isStr(c.reason)) return 'check.reason must be a string';
+  return null;
+}
+
+// The only fields carried into status.json from a plan task's check.
+export function normalizeCheck(c) {
+  if (c === undefined || c === null) return undefined;
+  const out = { kind: c.kind };
+  if (c.kind === 'command') out.command = c.command;
+  if (Array.isArray(c.cases)) out.cases = [...c.cases];
+  if (Array.isArray(c.unchecked)) out.unchecked = c.unchecked.map((u) => (isObj(u) ? { case: String(u.case ?? ''), reason: String(u.reason ?? '') } : { case: String(u), reason: '' }));
+  if (isStr(c.reason)) out.reason = c.reason;
+  return out;
+}
+
+export const sameCheck = (a, b) => JSON.stringify(normalizeCheck(a) ?? null) === JSON.stringify(normalizeCheck(b) ?? null);
+export const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+export function gitHead(dir) {
+  try { return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).toString().trim() || null; } catch { return null; }
+}
+
+// Latest recheck entry per task (array order is append order).
+export function latestRechecks(doc) {
+  const m = new Map();
+  if (isObj(doc) && Array.isArray(doc.rechecks)) for (const r of doc.rechecks) if (isObj(r) && isStr(r.task)) m.set(r.task, r);
+  return m;
+}
+
+// View of the re-checks: never runs anything. `head` is the current git sha (or null).
+export function recheckView(doc, head) {
+  const tasks = allTasks(doc);
+  const latest = latestRechecks(doc);
+  const byTask = [];
+  for (const t of tasks) {
+    const r = latest.get(t.id);
+    if (!r) continue;
+    byTask.push({ id: t.id, status: t.status, result: r.result, exit: r.exit ?? null, sha: r.sha ?? null, at: r.at ?? null, dirty: r.dirty === true, at_head: !!head && r.sha === head });
+  }
+  const verifiedIds = new Set(tasks.filter((t) => t.status === 'verified').map((t) => t.id));
+  const passed = (id) => latest.get(id)?.result === 'pass';
+  return {
+    head: head ?? null,
+    rechecked: [...verifiedIds].filter(passed).length,
+    failed: byTask.filter((b) => b.result !== 'pass').map((b) => b.id),
+    by_task: byTask,
+    unchecked: tasks.filter((t) => isObj(t.check) && t.check.kind === 'none').map((t) => ({ id: t.id, reason: t.check.reason ?? null })),
+    has_checks: tasks.some((t) => isObj(t.check)),
+  };
 }
 
 // ---------- lock + atomic write ----------

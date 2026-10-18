@@ -60,8 +60,9 @@ export function renderStatusMd(doc, view) {
   const errs = Array.isArray(v.errors) ? v.errors : [];
   if (errs.length) lines.push(`Progress: not trustworthy (status.json fails validation: ${errs.length} error(s); run status-write validate)`);
   else lines.push(`Progress: ${progress}${v.approximate ? ' (approximate)' : ''}`);
+  const rv = v.rechecks && typeof v.rechecks === 'object' ? v.rechecks : null;
   lines.push(
-    `Tasks: ${v.total ?? 0} · verified ${c('verified')} (claims) · done ${c('done')} · ` +
+    `Tasks: ${v.total ?? 0} · verified ${c('verified')} (claims)${rv ? ` · re-checked ${rv.rechecked ?? 0}` : ''} · done ${c('done')} · ` +
       `in-progress ${c('in-progress')} · blocked ${c('blocked')} · not-started ${c('not-started')}`,
   );
   lines.push(`Updated: ${flat(d.updated_at)}`);
@@ -84,6 +85,19 @@ export function renderStatusMd(doc, view) {
       : claims.map((k) => `- ${flat(k.id)} claimed by ${flat(k.by ?? 'unknown')} · verdict ${k.evidence ? '`' + flat(k.evidence) + '`' : '—'} · at ${flat(k.at ?? 'unknown')} · sha ${flat(k.sha ?? 'unreadable')}`).join('\n'),
   ));
   lines.push('');
+
+  // R-1: the last explicit re-run of each task's check command (from the committed plan). Shown only when the
+  // board has checks or re-checks; a FAILED re-check is listed, never folded into the status.
+  if (rv && (rv.has_checks || (Array.isArray(rv.by_task) && rv.by_task.length))) {
+    const rows = (Array.isArray(rv.by_task) ? rv.by_task : []).map((b) => {
+      const label = b.result === 'pass' ? 'PASS' : b.result === 'timeout' ? 'FAILED (timeout)' : 'FAILED';
+      return `- ${flat(b.id)} re-check ${label} · sha ${flat(String(b.sha ?? 'unknown').slice(0, 12))}${b.at_head ? ' (HEAD)' : ' (older commit)'}${b.dirty ? ' (dirty tree)' : ''} · exit ${flat(b.exit ?? 'none')} · at ${flat(b.at ?? 'unknown')}`;
+    });
+    const un = Array.isArray(rv.unchecked) ? rv.unchecked : [];
+    if (un.length) rows.push(`- unchecked (no check command): ${un.map((u) => flat(u.id) + (u.reason ? ` (${flat(u.reason)})` : '')).join(', ')}`);
+    lines.push(section('Re-checks', rows.length ? rows.join('\n') : 'None run yet (status-write recheck)'));
+    lines.push('');
+  }
 
   lines.push(section(
     'Pieces',

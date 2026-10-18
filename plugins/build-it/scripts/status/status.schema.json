@@ -15,7 +15,8 @@
     "waves": { "type": "array", "items": { "$ref": "#/$defs/wave" } },
     "sessions": { "type": "array", "items": { "$ref": "#/$defs/session" } },
     "pieces": { "type": "array", "items": { "$ref": "#/$defs/piece" } },
-    "history": { "type": "array", "items": { "$ref": "#/$defs/historyEntry" } }
+    "history": { "type": "array", "items": { "$ref": "#/$defs/historyEntry" } },
+    "rechecks": { "type": "array", "items": { "$ref": "#/$defs/recheckEntry" } }
   },
   "not": { "$ref": "#/$defs/forbidden" },
   "additionalProperties": true,
@@ -50,7 +51,8 @@
         "evidence": { "type": ["string", "null"] },
         "owner": { "type": ["string", "null"] },
         "updated_at": { "$ref": "#/$defs/isoUtc" },
-        "note": { "type": ["string", "null"] }
+        "note": { "type": ["string", "null"] },
+        "check": { "$ref": "#/$defs/check" }
       },
       "not": { "$ref": "#/$defs/forbidden" },
       "allOf": [
@@ -88,6 +90,43 @@
         "whats_left": { "type": "string", "not": { "pattern": "\\d\\s*%" } }
       },
       "not": { "$ref": "#/$defs/forbidden" },
+      "additionalProperties": true
+    },
+    "check": {
+      "description": "Copied from the committed plan at init; never changed afterwards. The recheck runner reads the command from the plan at HEAD, not from here.",
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["command", "none"] },
+        "command": { "type": "string" },
+        "cases": { "type": "array", "items": { "type": "string" } },
+        "unchecked": { "type": "array" },
+        "reason": { "type": "string" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "command" } } }, "then": { "required": ["command"], "properties": { "command": { "pattern": "\\S" } } } },
+        { "if": { "properties": { "kind": { "const": "none" } } }, "then": { "not": { "required": ["command"] } } }
+      ],
+      "additionalProperties": true
+    },
+    "recheckEntry": {
+      "type": "object",
+      "required": ["at", "task", "sha", "command_sha", "result"],
+      "properties": {
+        "at": { "$ref": "#/$defs/isoUtc" },
+        "task": { "type": "string", "minLength": 1 },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+        "dirty": { "type": "boolean" },
+        "plan_blob": { "type": ["string", "null"] },
+        "command_sha": { "type": "string" },
+        "result": { "enum": ["pass", "fail", "timeout"] },
+        "exit": { "type": ["integer", "null"] },
+        "signal": { "type": ["string", "null"] },
+        "timeout_ms": { "type": "integer" },
+        "duration_ms": { "type": "integer" },
+        "stdout_sha": { "type": "string" },
+        "tail": { "type": ["string", "null"] }
+      },
       "additionalProperties": true
     },
     "historyEntry": {
