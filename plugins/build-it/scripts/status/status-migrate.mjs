@@ -121,7 +121,7 @@ export function resolveEvidence(text, { repoRoot, implDir }) {
       if (!underDir(real, rootReal)) continue;
       const rel = path.relative(rootReal, real).split(path.sep).join('/');
       const bn = path.basename(rel);
-      if (['status.json', 'status.json.tmp', 'STATUS.md'].includes(bn)) continue;
+      if (['status.json', 'status.json.tmp', 'status.json.lock', 'status.md', 'status.md.tmp'].includes(bn.toLowerCase())) continue;
       const ok = (implReal && underDir(real, implReal)) || rel.split('/').includes('.taskstate');
       if (!ok) continue;
       try { if (!/\S/.test(fs.readFileSync(real).toString('latin1'))) continue; } catch { continue; }

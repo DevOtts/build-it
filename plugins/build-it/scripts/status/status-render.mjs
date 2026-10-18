@@ -7,10 +7,14 @@ export const RENDER_MARKER = '<!-- generated from status.json by status-write; d
 const NONE = 'None';
 const DASH = '—';
 
-// Flatten a value to one line of plain text.
+// Flatten a value to one line of inert text: no line breaks (incl. U+2028/2029), no control or bidi
+// characters, and "<" escaped so a field cannot open an HTML comment or tag that hides later rows (ST-08).
 function flat(value) {
   if (value === null || value === undefined) return DASH;
-  return String(value).replace(/\r\n|\r|\n/g, ' ').trim() || DASH;
+  return String(value)
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]+/g, ' ')
+    .replace(/</g, '&lt;')
+    .trim() || DASH;
 }
 
 // Table cell: flattened, with pipes escaped.
@@ -53,7 +57,9 @@ export function renderStatusMd(doc, view) {
   const progress = v.percent === 'unknown' || v.percent === undefined || v.percent === null
     ? 'unknown'
     : `${v.percent}%`;
-  lines.push(`Progress: ${progress}${v.approximate ? ' (approximate)' : ''}`);
+  const errs = Array.isArray(v.errors) ? v.errors : [];
+  if (errs.length) lines.push(`Progress: not trustworthy (status.json fails validation: ${errs.length} error(s); run status-write validate)`);
+  else lines.push(`Progress: ${progress}${v.approximate ? ' (approximate)' : ''}`);
   lines.push(
     `Tasks: ${v.total ?? 0} · verified ${c('verified')} · done ${c('done')} · ` +
       `in-progress ${c('in-progress')} · blocked ${c('blocked')} · not-started ${c('not-started')}`,

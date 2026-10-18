@@ -71,6 +71,7 @@ report   node "$W" view --file "$F"
 - Write at the boundary, not at the end of the run. A task finished without a write counts as not finished. Refresh the task's `piece` row after its finish (`whats_left` is one plain line, never a percent).
 - In parallel runs the coordinator makes every write against the one `status.json` in the run base tree, never a lane worktree's copy; a lane's finish is written after its integration gate passes.
 - Never write `verified` (review-it's), never hand-edit `status.json` or `STATUS.md` (the writer re-renders it), never type a percent. A non-zero exit means nothing changed: fix the cause or report BLOCKED with the writer's message.
+- `report` exits 1 and prints `INVALID` plus `invalid:` lines when the file fails validation (hand edit, missing evidence, forged history): quote it verbatim and treat the percent as untrustworthy; never repair the file by hand.
 
 ---
 

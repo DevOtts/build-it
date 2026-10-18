@@ -13,6 +13,9 @@ export const DONE_UNVERIFIED_WEIGHT = 0.6;
 export const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 export const LOCK_STALE_MS = 30 * 1000;
 export const RENDER_MARKER = '<!-- generated from status.json by status-write; do not edit by hand -->';
+export const VERIFY_ROLES = ['review-it', 'conclude-it'];
+export const MIGRATION = 'migration';
+export const FUTURE_SKEW_MS = 60 * 60 * 1000;
 export const VERDICT_RE = /^\s*(verdict|result)\s*[:=]\s*(PASS|VERIFIED)\b/im;
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -48,19 +51,38 @@ export function resolveStatusFile({ file, impl, cwd } = {}) {
   return plural;
 }
 
-const real = (p) => { try { return fs.realpathSync(p); } catch { return null; } };
-const BAD_EVIDENCE_NAMES = ['status.json', 'status.json.tmp', 'status.json.lock', 'STATUS.md'];
+const real = (p) => { try { return fs.realpathSync.native(p); } catch { return null; } };
+// Compared case-insensitively (APFS/NTFS are case-insensitive) on both the given and the resolved name (ST-08).
+const BAD_EVIDENCE_NAMES = ['status.json', 'status.json.tmp', 'status.json.lock', 'status.md', 'status.md.tmp'];
+const isBadEvidenceName = (p) => BAD_EVIDENCE_NAMES.includes(path.basename(p).toLowerCase()) || /\.lock\.\d+\.\d+\.stale$/.test(p);
+const reEsc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const VERDICT_ANY_RE = /^\s*(verdict|result)\s*[:=]\s*(\S+)/gim;
+const TASK_LINE_RE = /^\s*task\s*[:=]\s*(.+?)\s*$/gim;
+
+// After "close --move" the folder lives at <parent>/0-done/<name>, while evidence paths still name
+// <parent>/<name>/...: map them so a closed board keeps validating (ST-08).
+export function movedEvidence(repoRoot, implDir, relPath) {
+  if (!isStr(relPath) || !implDir || !repoRoot) return relPath;
+  const d = path.resolve(implDir);
+  if (path.basename(path.dirname(d)) !== '0-done') return relPath;
+  const oldRel = path.relative(repoRoot, path.join(path.dirname(path.dirname(d)), path.basename(d))).split(path.sep).join('/');
+  const norm = relPath.split('\\').join('/').replace(/^(\.\/)+/, '');
+  if (!norm.startsWith(oldRel + '/')) return relPath;
+  return path.relative(repoRoot, d).split(path.sep).join('/') + norm.slice(oldRel.length);
+}
 
 // Evidence must be a repo-relative regular, non-empty file under the impl folder or any .taskstate dir.
 export function checkEvidence(repoRoot, implDir, relPath, { verdictFor } = {}) {
   if (!isStr(relPath) || relPath.trim() === '') return { ok: false, reason: 'evidence path is empty' };
+  if (/[\\/]$/.test(relPath)) return { ok: false, reason: `evidence path must name a file, not end in a separator: ${relPath}` };
   if (path.isAbsolute(relPath) || /^[A-Za-z]:[\\/]/.test(relPath)) return { ok: false, reason: `evidence path must be repo-relative: ${relPath}` };
   if (relPath.split(/[\\/]/).includes('..')) return { ok: false, reason: `evidence path escapes the repo ("..") : ${relPath}` };
-  if (BAD_EVIDENCE_NAMES.includes(path.basename(relPath))) return { ok: false, reason: `evidence may not be ${path.basename(relPath)}` };
+  if (isBadEvidenceName(relPath)) return { ok: false, reason: `evidence may not be ${path.basename(relPath)}` };
   const abs = path.resolve(repoRoot, relPath);
   const rRoot = real(repoRoot);
   const rAbs = real(abs);
   if (!rAbs) return { ok: false, reason: `evidence file does not exist: ${relPath}` };
+  if (isBadEvidenceName(rAbs)) return { ok: false, reason: `evidence resolves to ${path.basename(rAbs)} (status files are not evidence): ${relPath}` };
   const within = (base, p) => p === base || p.startsWith(base + path.sep);
   if (!rRoot || !within(rRoot, rAbs)) return { ok: false, reason: `evidence resolves outside the repo: ${relPath}` };
   const rImpl = implDir ? real(implDir) : null;
@@ -77,7 +99,15 @@ export function checkEvidence(repoRoot, implDir, relPath, { verdictFor } = {}) {
   if (text.trim() === '') return { ok: false, reason: `evidence file has only whitespace: ${relPath}` };
   if (verdictFor !== undefined) {
     if (!text.includes('review-it')) return { ok: false, reason: `verdict file lacks the token "review-it": ${relPath}` };
-    if (!new RegExp(`(^|[^A-Za-z0-9_-])${String(verdictFor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_-])`).test(text)) return { ok: false, reason: `verdict file does not name task ${verdictFor}: ${relPath}` };
+    // The id must stand alone: "T-1" does not match inside "T-10", "T-1.2" or "T-1b" (ST-08).
+    const idRe = new RegExp(`(^|[^A-Za-z0-9_.-])${reEsc(verdictFor)}(?![A-Za-z0-9_-]|\\.[A-Za-z0-9])`);
+    if (!idRe.test(text)) return { ok: false, reason: `verdict file does not name task ${verdictFor}: ${relPath}` };
+    const taskLines = [...text.matchAll(TASK_LINE_RE)].map((m) => m[1].replace(/[`*]/g, '').trim());
+    if (taskLines.length && !taskLines.some((v) => v === String(verdictFor) || v.split(/[\s,]+/).includes(String(verdictFor)))) {
+      return { ok: false, reason: `verdict file is for task ${taskLines.join(', ')}, not ${verdictFor}: ${relPath}` };
+    }
+    const bad = [...text.matchAll(VERDICT_ANY_RE)].map((m) => m[2].replace(/[`*.,;]+$/g, '').replace(/^[`*]+/, '')).filter((v) => !/^(PASS|VERIFIED)$/i.test(v));
+    if (bad.length) return { ok: false, reason: `verdict file has a non-PASS verdict line (${bad.join(', ')}): ${relPath}` };
     if (!VERDICT_RE.test(text)) return { ok: false, reason: `verdict file lacks a "verdict: PASS" line: ${relPath}` };
   }
   return { ok: true };
@@ -92,12 +122,18 @@ export function allTasks(doc) {
   return out;
 }
 
-export function validate(doc, { dir, repoRoot } = {}) {
+export function validate(doc, opts = {}) {
+  const { dir, repoRoot } = opts;
   const errors = [];
   const err = (m) => errors.push(m);
   if (!isObj(doc)) return { ok: false, errors: ['status.json must be a JSON object'] };
   if (doc.schema !== SCHEMA_VERSION) return { ok: false, errors: [`unsupported schema ${JSON.stringify(doc.schema)}`] };
-  const forbid = (o, where) => { for (const k of FORBIDDEN_KEYS) if (isObj(o) && k in o) err(`forbidden key "${k}" ${where} (computed values are never stored)`); };
+  const checked = new WeakSet();
+  const forbid = (o, where) => {
+    if (!isObj(o)) return;
+    checked.add(o);
+    for (const k of Object.keys(o)) if (FORBIDDEN_KEYS.includes(k.toLowerCase())) err(`forbidden key "${k}" ${where} (computed values are never stored)`);
+  };
   forbid(doc, 'at top level');
   if (!isStr(doc.implementation) || !doc.implementation) err('implementation must be a non-empty string');
   if (dir && isStr(doc.implementation)) {
@@ -113,12 +149,37 @@ export function validate(doc, { dir, repoRoot } = {}) {
   const root = repoRoot || (dir ? resolveRepoRoot(dir) : null);
   const seen = new Set();
   const lastHist = new Map();
+  const nowMs = opts.now ?? Date.now();
+  const future = (v, where) => { const m = isStr(v) && ISO_RE.test(v) ? Date.parse(v) : NaN; if (m > nowMs + FUTURE_SKEW_MS) err(`${where} is in the future (${v}); timestamps come from the writer's clock`); };
+  future(doc.updated_at, 'updated_at');
+  // History integrity (ST-08): known roles, verified only by review-it/conclude-it, lowering verified needs a note,
+  // each task's entries chain (from == previous to), migration entries only as a prefix and only with approximate.
+  let lastStar = null;
+  let sawWriter = false;
+  const sameState = (a, b) => (a === 'removed' ? 'not-started' : a) === (b === 'removed' ? 'not-started' : b);
   if (Array.isArray(doc.history)) {
     doc.history.forEach((h, i) => {
       if (!isObj(h)) return err(`history[${i}] must be an object`);
       for (const k of ['at', 'task', 'from', 'to', 'by']) if (!isStr(h[k])) err(`history[${i}].${k} must be a string`);
-      if (isStr(h.task)) lastHist.set(h.task, h);
+      if (!isStr(h.task)) return;
+      future(h.at, `history[${i}].at`);
+      if (h.by === MIGRATION) {
+        if (sawWriter) err(`history[${i}]: a "migration" entry after writer entries (migration only creates a file; forged?)`);
+        if (doc.approximate !== true) err(`history[${i}]: a "migration" entry requires "approximate": true`);
+      } else {
+        sawWriter = true;
+        if (!ROLES.includes(h.by)) err(`history[${i}].by "${h.by}" is not a known role`);
+      }
+      if (h.task === '*') { lastStar = h; return; }
+      if (h.to === 'verified' && !VERIFY_ROLES.includes(h.by) && h.by !== MIGRATION) err(`history[${i}]: ${h.by} may not set ${h.task} verified (only ${VERIFY_ROLES.join(' or ')})`);
+      if (h.from === 'verified' && h.to !== 'verified' && !(isStr(h.note) && h.note.trim())) err(`history[${i}]: ${h.task} lowered from verified without a note`);
+      const prev = lastHist.has(h.task) ? lastHist.get(h.task).to : 'not-started';
+      if (!sameState(h.from, prev)) err(`history[${i}]: ${h.task} moves from "${h.from}" but its previous state was "${prev}" (history edited by hand?)`);
+      lastHist.set(h.task, h);
     });
+  }
+  if ((doc.closed === true) !== (lastStar !== null && lastStar.to === 'closed')) {
+    err(doc.closed === true ? 'closed is true but no "close" history entry backs it (set by hand?)' : 'history says closed but "closed" is not true (reopened by hand?)');
   }
   if (Array.isArray(doc.waves)) {
     doc.waves.forEach((w, wi) => {
@@ -137,6 +198,7 @@ export function validate(doc, { dir, repoRoot } = {}) {
         if (!isStr(t.title)) err(`${at}: title must be a string`);
         if (!STATUSES.includes(t.status)) { err(`${at}: status must be one of ${STATUSES.join(', ')}`); return; }
         if (!isStr(t.updated_at) || !ISO_RE.test(t.updated_at)) err(`${at}: updated_at must be an ISO 8601 UTC string`);
+        else future(t.updated_at, `${at}: updated_at`);
         for (const k of ['blocked_on', 'evidence', 'note']) if (t[k] != null && !isStr(t[k])) err(`${at}: ${k} must be a string or null`);
         if (t.owner != null && !isStr(t.owner)) err(`${at}: owner must be a string`);
         if (t.status === 'blocked' && !(isStr(t.blocked_on) && t.blocked_on.trim())) err(`${at}: blocked requires blocked_on`);
@@ -144,15 +206,16 @@ export function validate(doc, { dir, repoRoot } = {}) {
           if (!(isStr(t.evidence) && t.evidence.trim())) err(`${at}: ${t.status} requires evidence`);
           else if (dir && root) {
             const lh = lastHist.get(t.id);
-            const migrated = lh && lh.by === 'migration';
-            const r = checkEvidence(root, dir, t.evidence, t.status === 'verified' && !migrated ? { verdictFor: t.id } : {});
+            // The verdict check is skipped only for a migrated row, and only while the file says approximate (ST-08).
+            const migrated = lh && lh.by === MIGRATION && doc.approximate === true;
+            const r = checkEvidence(root, dir, movedEvidence(root, dir, t.evidence), t.status === 'verified' && !migrated ? { verdictFor: t.id } : {});
             if (!r.ok) err(`${at}: ${r.reason}`);
           }
         }
+        const h = isStr(t.id) ? lastHist.get(t.id) : undefined;
         if (t.status !== 'not-started') {
-          const h = lastHist.get(t.id);
           if (!h || h.to !== t.status) err(`${at}: status "${t.status}" has no matching history entry (edited without the writer?)`);
-        }
+        } else if (h && !sameState(h.to, 'not-started')) err(`${at}: status "not-started" but its last history entry says "${h.to}" (reset by hand?)`);
       });
     });
   }
@@ -174,8 +237,19 @@ export function validate(doc, { dir, repoRoot } = {}) {
       if (!isStr(p.whats_left)) err(`pieces[${i}].whats_left must be a string`);
       else if (/\d\s*%/.test(p.whats_left)) err(`pieces[${i}].whats_left must not contain a percent`);
       if (p.blocked_on != null && !isStr(p.blocked_on)) err(`pieces[${i}].blocked_on must be a string or null`);
+      if (p.status === 'blocked' && !(isStr(p.blocked_on) && p.blocked_on.trim())) err(`pieces[${i}]: blocked requires blocked_on`);
     });
   }
+  // A task that has history but is gone from the waves was deleted by hand (the writer records "removed").
+  for (const [id, h] of lastHist) if (!seen.has(id) && h.to !== 'removed') err(`task ${id} has history (last "${h.to}") but is missing from the waves (deleted by hand?)`);
+  // Forbidden keys anywhere else (sessions, history, nested objects), any letter case.
+  const deep = (o, where) => {
+    if (Array.isArray(o)) return o.forEach((x, i) => deep(x, `${where}[${i}]`));
+    if (!isObj(o)) return;
+    if (!checked.has(o)) for (const k of Object.keys(o)) if (FORBIDDEN_KEYS.includes(k.toLowerCase())) err(`forbidden key "${k}" at ${where} (computed values are never stored)`);
+    for (const [k, v] of Object.entries(o)) if (v && typeof v === 'object') deep(v, `${where}.${k}`);
+  };
+  deep(doc, '$');
   return { ok: errors.length === 0, errors };
 }
 
@@ -223,7 +297,7 @@ export function computeView(doc, opts = {}) {
   if (doc.schema !== SCHEMA_VERSION) return { error: `unsupported schema ${JSON.stringify(doc.schema)}` };
   const tasks = allTasks(doc);
   const counts = Object.fromEntries(STATUSES.map((s) => [s, 0]));
-  for (const t of tasks) if (t.status in counts) counts[t.status] += 1;
+  for (const t of tasks) if (Object.hasOwn(counts, t.status)) counts[t.status] += 1;
   const blocked_list = tasks.filter((t) => t.status === 'blocked').map((t) => ({ id: t.id, title: t.title, blocked_on: t.blocked_on }));
   const newest = opts.newestActivity !== undefined ? opts.newestActivity : (opts.dir ? newestActivity(opts.dir, doc) : null);
   return {
@@ -267,8 +341,20 @@ export async function withLock(file, fn, { timeoutMs = 5000, staleMs = LOCK_STAL
       try {
         const age = Date.now() - fs.statSync(lock).mtimeMs;
         let dead = false;
-        try { const pid = parseInt(fs.readFileSync(lock, 'utf8'), 10); if (pid > 0) { try { process.kill(pid, 0); } catch (k) { dead = k.code === 'ESRCH'; } } } catch { /* unreadable */ }
-        if (age > staleMs || dead) { process.stderr.write(`status-write: reclaiming stale/dead-holder lock ${lock}\n`); fs.unlinkSync(lock); continue; }
+        let seenText = null;
+        try { seenText = fs.readFileSync(lock, 'utf8'); const pid = parseInt(seenText, 10); if (pid > 0) { try { process.kill(pid, 0); } catch (k) { dead = k.code === 'ESRCH'; } } } catch { /* unreadable */ }
+        if (age > staleMs || dead) {
+          // Reclaim by rename, then confirm we moved the lock we judged stale. If another writer re-took the
+          // lock in between, put its lock back instead of deleting it (ST-08: no unlink of a fresh lock).
+          process.stderr.write(`status-write: reclaiming stale/dead-holder lock ${lock}\n`);
+          const grave = `${lock}.${process.pid}.${Date.now()}.stale`;
+          try { fs.renameSync(lock, grave); } catch { continue; }
+          let movedText = null;
+          try { movedText = fs.readFileSync(grave, 'utf8'); } catch { /* gone */ }
+          if (seenText !== null && movedText !== seenText) { try { fs.linkSync(grave, lock); } catch { /* a third writer holds it */ } }
+          try { fs.unlinkSync(grave); } catch { /* gone */ }
+          continue;
+        }
       } catch { continue; }
       if (Date.now() - start > timeoutMs) { const er = new Error(`could not acquire lock ${lock}`); er.code = 'ELOCK'; throw er; }
       await sleep(delay + Math.floor(Math.random() * delay));
@@ -280,7 +366,9 @@ export async function withLock(file, fn, { timeoutMs = 5000, staleMs = LOCK_STAL
 
 export function writeAtomic(file, doc) {
   const tmp = `${file}.tmp`;
-  const fd = fs.openSync(tmp, 'w');
+  // Never write through a planted file or symlink at the tmp path (ST-08): remove it, then create exclusively.
+  try { fs.unlinkSync(tmp); } catch { /* absent */ }
+  const fd = fs.openSync(tmp, 'wx');
   try { fs.writeSync(fd, JSON.stringify(doc, null, 2) + '\n'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   if (process.env.STATUS_WRITE_TEST_CRASH === 'after-tmp') process.exit(137); // test-only hook (AT-14)
   fs.renameSync(tmp, file);
