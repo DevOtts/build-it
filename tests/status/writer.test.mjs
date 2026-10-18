@@ -275,3 +275,20 @@ test('view command prints percent and blocked list; render without renderer fail
   const j = JSON.parse(v.out);
   assert.equal(j.counts.blocked, 1); assert.equal(j.blocked_list[0].blocked_on, 'waiting'); assert.equal(j.percent, 0);
 });
+
+test('init records a created history entry per task, validate passes; merge adds only for new tasks', () => {
+  const s = mkImpl({ tasks: ['A-1', 'A-2', 'A-3'] });
+  const created = (id) => s.read().history.filter((e) => e.task === id);
+  for (const id of ['A-1', 'A-2', 'A-3']) {
+    const h = created(id);
+    assert.equal(h.length, 1);
+    assert.deepEqual([h[0].from, h[0].to, h[0].by, h[0].note], ['not-started', 'not-started', 'plan-it', 'created']);
+  }
+  assert.equal(s.w(['validate']).code, 0);
+  const plan = { implementation: 'demo', title: 'Demo', waves: [{ id: 'W1', title: 'Wave one', tasks: ['A-1', 'A-4'].map((id) => ({ id, title: id })) }] };
+  fs.writeFileSync(s.planFile, JSON.stringify(plan));
+  assert.equal(s.w(['init', '--plan', s.planFile, '--by', 'plan-it', '--merge']).code, 0);
+  assert.equal(created('A-1').length, 1);
+  assert.equal(created('A-4').length, 1);
+  assert.equal(s.w(['validate']).code, 0);
+});
