@@ -4,6 +4,48 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.1.0] — 2026-10-18
+
+Minor release. build-it now keeps a machine-readable `status.json` per implementation, through
+one shared writer, and gates run boundaries on review-it checkpoints.
+
+### Added
+- `plugins/build-it/scripts/status/`: `status-write`, the single zero-dependency writer for
+  `status.json` (schema 1), with `status-lib` (validator, percent), `status-render` (STATUS.md from
+  the JSON), `status-migrate` (STATUS.md to `status.json`, marked approximate) and the JSON Schema.
+  Roles are enforced: build-it writes `in-progress`, `blocked` and `done` (with evidence);
+  `verified` only from review-it or conclude-it with a verdict file that names the task.
+- Status boundary gate in the build-it skill: the writer is called at every task start, block and
+  finish, not only at the end.
+- `status-write recheck`: re-runs a task's Test Contract command on demand. The command comes from
+  the committed plan, never from `status.json`; results are cached per git sha.
+- `scripts/checkpoints/checkpoints.mjs`: reads the `review_checkpoints` plan-it decided and refuses
+  to cross a boundary without a PASS verdict from review-it.
+- init-it support: `status-write session add|end`, `init --create`, and session registration at run
+  start.
+- A `created` history entry for every task plan-it creates.
+
+### Changed
+- `set --status done|verified` now requires an explicit `--evidence`. Stored evidence is no longer
+  reused, so a task sent back to `in-progress` cannot return to `done` or `verified` on its old
+  evidence. Scripts that relied on the reuse must pass `--evidence`.
+- `verified` is shown as a claim: `verified N (claims)`, with each verdict path, time and the sha256
+  of the verdict file as it reads now.
+
+### Fixed
+- 21 findings of an adversarial pass (F-01 to F-21), each with a regression test. Among them: a
+  hand-edited board could print 100% in `view` and `render`, a forged `migration` history entry
+  was accepted, a symlinked evidence file was accepted, and a newline in `--blocked-on` could
+  forge a "100%" line.
+
+### Known limits
+- `--by` cannot authenticate the caller. Anyone who can run the writer as review-it, or write a
+  verdict-shaped file plus a matching history entry, can still fake `verified`. There are no signing
+  keys on purpose: any key on the same machine is readable by the same agent. Treat `verified` as a
+  claim, as the output labels it.
+- Real-artifact verification covers 41 of the 42 binding cases; the stale half of T-B-20 needs a
+  commit more than 24 hours after the board was written.
+
 ## [4.0.0] — 2026-10-14
 
 Major release: build-it moves to 4.0.0 together with the rest of the *-it lifecycle
