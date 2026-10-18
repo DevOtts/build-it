@@ -120,7 +120,7 @@ test("AT-6: a legacy READINESS (no gates/covers, blocks 'start of W1') gets the 
   assert.equal(r.status, 2);
   assert.match(r.stdout, /CP-01 wave MISSING: .*depends on covered work A0/);
   const c = spawnSync(process.execPath, [SCRIPT, "check", "--id", "CP-01", "--readiness", "plan/READINESS.json", "--root", d], { encoding: "utf8" });
-  assert.match(c.stdout, /Holds until PASS: slices that depend on W0, and promotion of W0/);
+  assert.match(c.stdout, /Holds until PASS: slices outside W0 that depend on it, and promotion of W0/);
   assert.doesNotMatch(c.stdout, /start of W1/);
   fs.rmSync(d, { recursive: true, force: true });
 });
@@ -194,5 +194,86 @@ test("status still exits 0 only when every checkpoint is PASS", () => {
   pass(d, "CP-02");
   pass(d, "CP-04");
   assert.equal(spawnSync(process.execPath, [SCRIPT, "status", "--readiness", "plan/READINESS.json", "--root", d]).status, 0);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+// ---- H-21: a checkpoint cannot hold the start of the work it covers --------------------------
+// Found by the first real run: CP-01 covers all of W0, so a W0 slice that needs another W0 slice waited on
+// CP-01, a review that only runs once W0 has ended. Nothing in W0 could finish, so the wave never ended.
+function sameWave() {
+  const doc = clone(FIXTURE);
+  doc.slices.push({ id: "C0", lane: "x", tier: "T3", class: "gather", depends_on: ["A0"], wave: "W0" });
+  doc.slices.push({ id: "D1", lane: "x", tier: "T3", class: "gather", depends_on: ["A1"], wave: "W1" });
+  return doc;
+}
+
+test("H-21: a W0 slice that depends on another W0 slice is not held by CP-01, which covers W0", () => {
+  const d = repo(sameWave());
+  const r = gate(d, "--action", "start", "--slice", "C0");
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(r.stdout, /^ALLOWED start C0/);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-21: the same inside W1: D1 needs A1, both in W1, and CP-02 covers W1", () => {
+  const d = repo(sameWave());
+  const r = gate(d, "--action", "start", "--slice", "D1");
+  assert.equal(r.status, 0, r.stdout);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-21: a slice OUTSIDE the covered wave that depends on it is still held (B1 needs A0)", () => {
+  const d = repo(sameWave());
+  const r = gate(d, "--action", "start", "--slice", "B1");
+  assert.equal(r.status, 2, r.stdout);
+  assert.match(r.stdout, /CP-01 wave MISSING: .*depends on covered work A0/);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-21: promoting the covered slice C0 is still held by CP-01", () => {
+  const d = repo(sameWave());
+  const r = gate(d, "--action", "promote", "--slice", "C0");
+  assert.equal(r.status, 2, r.stdout);
+  assert.match(r.stdout, /CP-01/);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-21: with a PASS on CP-01 nothing changes for the dependents outside W0", () => {
+  const d = repo(sameWave());
+  pass(d, "CP-01");
+  assert.equal(gate(d, "--action", "start", "--slice", "B1").status, 0);
+  assert.equal(gate(d, "--action", "start", "--slice", "C0").status, 0);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+// ---- H-22: due --at merge / release ---------------------------------------------------------
+// The pre-release checkpoint's text starts "after merge,", so a prefix match returned it for `--at merge`,
+// and `--at release` matched nothing.
+const due = (root, at) => spawnSync(process.execPath, [SCRIPT, "due", "--readiness", "plan/READINESS.json", "--root", root, "--at", at], { encoding: "utf8" });
+
+test("H-22: due --at merge returns the pre-merge checkpoint and not the pre-release one", () => {
+  const d = repo();
+  const r = due(d, "merge");
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(r.stdout, /DUE CP-03 pre-merge/);
+  assert.doesNotMatch(r.stdout, /CP-04/);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-22: due --at release returns the pre-release checkpoint", () => {
+  const d = repo();
+  const r = due(d, "release");
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(r.stdout, /DUE CP-04 pre-release/);
+  assert.doesNotMatch(r.stdout, /CP-03/);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-22: the kind names and wave ids still work", () => {
+  const d = repo();
+  assert.match(due(d, "pre-merge").stdout, /DUE CP-03/);
+  assert.match(due(d, "pre-release").stdout, /DUE CP-04/);
+  assert.match(due(d, "W0").stdout, /DUE CP-01 wave/);
+  assert.equal(due(d, "W9").status, 3);
   fs.rmSync(d, { recursive: true, force: true });
 });

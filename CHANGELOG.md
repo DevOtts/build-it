@@ -4,6 +4,24 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.1.2] — 2026-10-18
+
+Patch release. Two defects in the 4.1.1 checkpoint gate, found when the real READINESS of the first
+real run was put through it.
+
+### Fixed
+- A checkpoint no longer holds the start of the work it covers (finding H-21). A wave checkpoint
+  covering W0 held a W0 slice that depends on another W0 slice, but the review only runs after W0 has
+  ended, so the wave could never finish. It now holds only the slices outside the covered work that
+  depend on it, and the promotion of the covered work. On that real plan, with no verdict at all,
+  all 17 W0 slices may start and every held slice is one that sits outside W0 and needs W0 work.
+- `due --at merge` returned the pre-release checkpoint, whose text starts "after merge,", and
+  `due --at release` returned nothing (finding H-22). `merge` and `release` are now aliases of the
+  `pre-merge` and `pre-release` kinds. Wave ids and kind names behave as before.
+
+### Changed
+- `gate` messages say "slices outside <wave> that depend on it".
+
 ## [4.1.1] — 2026-10-18
 
 Patch release. The first real run of the harness on a 23-epic, 5-wave program showed that review

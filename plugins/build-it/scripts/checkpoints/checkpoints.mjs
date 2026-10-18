@@ -5,14 +5,16 @@
 // build-it never decides the count; it reads it, runs review-it at each
 // checkpoint, and asks `gate` before it starts, promotes, merges or releases.
 // A checkpoint holds only what its `gates` name, for the work it `covers`: a
-// wave checkpoint holds the slices that depend on that wave and the promotion
-// of that wave's work, never independent work (finding H-10).
+// wave checkpoint holds the slices OUTSIDE that wave that depend on it, and the
+// promotion of that wave's work. It never holds independent work (finding
+// H-10), and it never holds the start of the work it covers (finding H-21).
 // Zero dependencies.
 //
 // Usage (every command takes --readiness <plan/READINESS.json>):
 //   checkpoints.mjs plan              list the checkpoints
 //   checkpoints.mjs due --at <ref>    checkpoints due at a boundary: a wave id
 //                                     (W1), a task id, adversarial, pre-merge, pre-release
+//                                     (`merge` and `release` are aliases of the last two)
 //   checkpoints.mjs check --id CP-01  is the verdict file there and a PASS?
 //   checkpoints.mjs status            every checkpoint with its verdict state
 //   checkpoints.mjs gate --action start|promote|merge|release [--slice <id>]
@@ -51,8 +53,13 @@ export function validateBlock(block) {
 }
 
 // Which checkpoints fire at a boundary reference.
+// `merge` and `release` name the boundary, not a wave. Matching them by the "after <ref>" prefix of the `at`
+// text returned the pre-release checkpoint for `merge` (its text starts "after merge,") and nothing for
+// `release` (finding H-22), so they are aliases of the two closing kinds and nothing else.
+const BOUNDARY_ALIAS = { merge: "pre-merge", release: "pre-release" };
 export function dueAt(block, ref) {
   const r = String(ref);
+  if (BOUNDARY_ALIAS[r]) return block.checkpoints.filter((c) => c.kind === BOUNDARY_ALIAS[r]);
   return block.checkpoints.filter((c) => c.kind === r || c.at === `after ${r}` || String(c.at).startsWith(`after ${r},`));
 }
 
@@ -87,7 +94,7 @@ export function holdsText(c) {
   const e = effective(c);
   if (!e.legacy && c.blocks) return c.blocks;
   const what = e.covers ? e.covers.join(", ") : "the covered work (unknown)";
-  const parts = e.gates.map((g) => (g === "dependents" ? `slices that depend on ${what}` : g === "promotion" ? `promotion of ${what}` : g === "merge" ? "merge to main" : "tag, publish or deploy"));
+  const parts = e.gates.map((g) => (g === "dependents" ? `slices outside ${what} that depend on it` : g === "promotion" ? `promotion of ${what}` : g === "merge" ? "merge to main" : "tag, publish or deploy"));
   return parts.join(", and ");
 }
 
@@ -176,6 +183,10 @@ export function gateDecision(doc, block, action, sliceId, verdictOf) {
     const whole = action === "merge" || action === "release" || (action === "promote" && !target);
     if (whole || scoped.length < hit.length) { blocked.push(`${why}; holds ${holdsText(c)}`); continue; }
     if (!e.covers) { unknown.push(`${c.id} ${c.kind} has no covers${e.legacy ? " (a plan written before gates/covers; re-run plan-it's review-checkpoints decide)" : ""}, so what it holds cannot be told; its verdict is ${v.state}`); continue; }
+    // A checkpoint reviews the work it covers, so it cannot hold the start of that same work. With the whole
+    // wave covered, a W0 slice that needs another W0 slice would otherwise wait on a review that only runs
+    // after W0 ends: a deadlock (finding H-21). It holds slices OUTSIDE the covered work that depend on it.
+    if (action === "start" && covered(e.covers, waveIds, target) === true) continue;
     const pool = action === "start" ? [...anc.seen].map((x) => byId.get(x)) : [target];
     const hits = [];
     const cant = [];
