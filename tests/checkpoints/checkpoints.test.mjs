@@ -108,7 +108,8 @@ test("CLI check gates the boundary: missing 2, FAIL 1, PASS 0", () => {
   const d = repo();
   let r = run(d, "check", "--id", "CP-01");
   assert.equal(r.status, 2);
-  assert.match(r.stdout, /Do not cross: start of W2/);
+  assert.match(r.stdout, /Holds until PASS: slices that depend on W1, and promotion of W1/);
+  assert.doesNotMatch(r.stdout, /start of W2/);
   verdict(d, "plan/reviews/CP-01-wave-w1.md", "checkpoint: CP-01\nverdict: FAIL\n");
   assert.equal(run(d, "check", "--id", "CP-01").status, 1);
   verdict(d, "plan/reviews/CP-01-wave-w1.md", "checkpoint: CP-01\nverdict: PASS\ncases: 12/12\n");
