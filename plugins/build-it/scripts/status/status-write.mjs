@@ -9,12 +9,16 @@ import {
   SCHEMA_VERSION, STATUSES, ROLES, SESSION_ROLES, FORBIDDEN_KEYS, RENDER_MARKER,
   validate, computeView, checkEvidence, resolveRepoRoot, resolveStatusFile,
   withLock, writeAtomic, nowIso, allTasks, newestActivity, movedEvidence,
+  checkShapeError, normalizeCheck, sameCheck, RECHECK_KEEP_PER_TASK,
 } from './status-lib.mjs';
+import {
+  parseDuration, readCommittedPlan, planChecks, treeDirty, commandSha, findCached, runCheck, resultOf,
+} from './recheck.mjs';
 
 class Refusal extends Error { constructor(msg, code = 1) { super(msg); this.exitCode = code; } }
 
-const BOOL_FLAGS = new Set(['merge', 'json', 'force', 'end-sessions', 'move']);
-const USAGE = `usage: status-write <init|set|piece|rename|remove|session|close|reopen|validate|view|render> [args] --file <status.json> [--by ROLE]
+const BOOL_FLAGS = new Set(['merge', 'json', 'force', 'end-sessions', 'move', 'fresh']);
+const USAGE = `usage: status-write <init|set|piece|rename|remove|session|close|reopen|validate|view|render|recheck> [args] --file <status.json> [--by ROLE]
   see plugins/build-it/scripts/status/README.md`;
 
 function parseArgs(argv) {
@@ -106,6 +110,7 @@ async function mutate(file, apply, { mustExist = true } = {}) {
         const out = await apply(doc);
         const next = out.doc;
         scanForbidden(next, 'the resulting document');
+        if (before !== null) guardChecks(JSON.parse(before), next);
         next.updated_at = nowIso();
         const dir = path.dirname(file);
         const v = validate(next, { dir, repoRoot: resolveRepoRoot(dir) });
@@ -125,15 +130,39 @@ async function mutate(file, apply, { mustExist = true } = {}) {
   function frozen0(d) { if (d && out_allow_frozen.has(currentCmd)) return; frozen(d); }
 }
 let currentCmd = '';
-const out_allow_frozen = new Set(['reopen']);
+// recheck only appends to rechecks[]; it is allowed on a closed board (re-checking a closed implementation is
+// the point of R-1) and changes no status, history or task field.
+const out_allow_frozen = new Set(['reopen', 'recheck']);
+
+// R-1: check commands enter status.json only at init, from the plan. No later write may add, change or drop one
+// (init --merge handles its own rule), and only `recheck` may touch rechecks[].
+function guardChecks(prev, next) {
+  if (currentCmd !== 'init') {
+    const old = new Map(allTasks(prev).map((t) => [t.id, t]));
+    for (const t of allTasks(next)) {
+      const o = old.get(t.id);
+      const had = o ? o.check : undefined;
+      if (!sameCheck(had, t.check)) throw new Refusal(`check command of ${t.id} may not change after init (check commands come only from the committed plan)`, 1);
+    }
+  }
+  if (currentCmd !== 'recheck' && JSON.stringify(prev.rechecks ?? null) !== JSON.stringify(next.rechecks ?? null)) {
+    throw new Refusal('rechecks[] is written only by "status-write recheck"', 1);
+  }
+}
 
 // ---------- commands ----------
 function buildInit(plan, by, dir) {
   scanForbidden(plan, 'plan.json');
   const impl = plan.implementation || path.basename(dir);
-  const tasks = (w) => (w.tasks || []).map((t) => ({
-    id: t.id, title: t.title, status: 'not-started', blocked_on: null, evidence: null, owner: t.owner ?? null, updated_at: nowIso(), note: null,
-  }));
+  const tasks = (w) => (w.tasks || []).map((t) => {
+    const row = { id: t.id, title: t.title, status: 'not-started', blocked_on: null, evidence: null, owner: t.owner ?? null, updated_at: nowIso(), note: null };
+    if (t.check !== undefined) {
+      const ce = checkShapeError(t.check);
+      if (ce) throw new Refusal(`plan task ${t.id}: ${ce}`, 1);
+      row.check = normalizeCheck(t.check);
+    }
+    return row;
+  });
   return {
     schema: SCHEMA_VERSION, implementation: impl, title: plan.title || impl, updated_at: nowIso(), approximate: false, closed: false,
     waves: (plan.waves || []).map((w) => ({ id: w.id, title: w.title, tasks: tasks(w) })),
@@ -159,6 +188,15 @@ async function cmdInit(file, flags) {
       if (!ew) { doc.waves.push(w); continue; }
       for (const t of w.tasks) if (!allTasks(doc).some((x) => x.id === t.id)) ew.tasks.push(t);
     }
+    // R-1: a re-planned check may replace the copy only while the task is not-started. A task that has no check
+    // yet (a board from before checks existed) may receive one from the plan. Changing an existing check of
+    // started work is refused (the whole merge, so nothing half-applies); a human decides that by hand.
+    for (const t of allTasks(fresh)) {
+      const e = allTasks(doc).find((x) => x.id === t.id);
+      if (!e || sameCheck(e.check, t.check)) continue;
+      if (e.status !== 'not-started' && e.check !== undefined) throw new Refusal(`init --merge refused: the plan changes the check command of ${e.id}, which is ${e.status} (check commands of started work are fixed)`, 1);
+      if (t.check === undefined) delete e.check; else e.check = t.check;
+    }
     for (const p of fresh.pieces) if (!doc.pieces.some((x) => x.piece === p.piece)) doc.pieces.push(p);
     return { doc };
   }, { mustExist: false });
@@ -173,6 +211,7 @@ const SET_ROLES = {
 async function cmdSet(file, pos, flags) {
   const id = pos[0]; if (!id) throw new Refusal('set <TASK> ...', 2);
   const by = needBy(flags); rejectForbiddenFlags(flags);
+  if ('check' in flags || 'check-command' in flags) throw new Refusal('a check command cannot be set through status.json; it comes only from the committed plan at init', 1);
   if (flags.status && !STATUSES.includes(flags.status)) throw new Refusal(`invalid status "${flags.status}" (allowed: ${STATUSES.join(', ')})`, 1);
   if (!flags.status && !('owner' in flags) && !('note' in flags)) throw new Refusal('set needs --status, --owner or --note', 2);
   if (flags.status) allow(by, SET_ROLES[flags.status], `set status ${flags.status}`);
@@ -316,6 +355,71 @@ async function cmdReopen(file, flags) {
   say('reopened');
 }
 
+// ---------- recheck (R-1) ----------
+// Re-runs the Test Contract check of each task on demand. The command is read from <impl dir>/plan.json as
+// committed at HEAD, never from status.json. Results are appended to rechecks[]; no status changes, the percent
+// is unchanged. Exit 0 all ran checks passed (unchecked tasks are reported, not failed), 4 a check failed or
+// timed out (recorded), 1 refused (file byte-identical), 2 usage, 3 lock.
+async function cmdRecheck(file, flags) {
+  const timeoutMs = parseDuration(flags.timeout);
+  if (timeoutMs === null) throw new Refusal(`invalid --timeout "${flags.timeout}" (use e.g. 60s, 500ms, 2m)`, 2);
+  const { doc } = loadDoc(file);
+  const targets = flags.task ? [findTask(doc, flags.task)] : allTasks(doc);
+  const cp = readCommittedPlan(file);
+  if (cp.error) throw new Refusal(`recheck refused: ${cp.error}`, 1);
+  if (cp.workingDiffers) process.stderr.write(`status-write: ${cp.rel} differs from HEAD; using the committed version\n`);
+  const fromPlan = planChecks(cp.plan);
+  // Tamper check first, for every target, so a refusal leaves the file untouched and runs nothing.
+  for (const t of targets) {
+    if (t.check !== undefined && !sameCheck(t.check, fromPlan.get(t.id))) {
+      throw new Refusal(`recheck refused: the check of ${t.id} in status.json differs from the committed plan ${cp.rel} (edited by hand?); nothing was run`, 1);
+    }
+  }
+  const sha = cp.head;
+  const dirty = treeDirty(cp.root, file);
+  const lines = []; const entries = []; let failed = 0;
+  for (const t of targets) {
+    const check = fromPlan.get(t.id);
+    if (!check || check.kind !== 'command') {
+      lines.push(`${t.id} unchecked: ${check ? `kind none${check.reason ? ` (${oneLine(check.reason)})` : ''}` : 'no check in the committed plan'}`);
+      continue;
+    }
+    const cmdSha = commandSha(check.command);
+    const hit = flags.fresh || dirty ? null : findCached(doc, t.id, sha, cmdSha);
+    if (hit) {
+      if (hit.result !== 'pass') failed++;
+      lines.push(`${t.id} re-check ${hit.result === 'pass' ? 'PASS' : 'FAILED'} at sha ${sha.slice(0, 12)} (cached from ${hit.at}, exit ${hit.exit})`);
+      continue;
+    }
+    const r = await runCheck(check.command, { cwd: cp.root, timeoutMs });
+    const result = resultOf(r);
+    if (result !== 'pass') failed++;
+    entries.push({
+      at: nowIso(), task: t.id, sha, dirty, plan_blob: cp.blob, command_sha: cmdSha, result,
+      exit: r.exit, signal: r.signal, timeout_ms: timeoutMs, duration_ms: r.duration_ms, stdout_sha: r.stdout_sha,
+      tail: result === 'pass' ? null : oneLine(r.tail).slice(-300),
+    });
+    lines.push(`${t.id} re-check ${result === 'pass' ? 'PASS' : result === 'timeout' ? `FAILED (timeout after ${timeoutMs} ms)` : 'FAILED'} at sha ${sha.slice(0, 12)}${dirty ? ' (dirty tree)' : ''} (exit ${r.exit ?? 'none'}, ${r.duration_ms} ms)`);
+  }
+  if (entries.length) {
+    const r = await mutate(file, (d) => {
+      for (const e of entries) {
+        const t = findTask(d, e.task);
+        if (t.check !== undefined && !sameCheck(t.check, fromPlan.get(t.id))) throw new Refusal(`recheck refused: the check of ${t.id} changed in status.json while it ran`, 1);
+      }
+      const all = [...(Array.isArray(d.rechecks) ? d.rechecks : []), ...entries];
+      // Keep the latest RECHECK_KEEP_PER_TASK entries per task.
+      const seen = new Map(); const kept = [];
+      for (let i = all.length - 1; i >= 0; i--) { const n = (seen.get(all[i].task) || 0) + 1; seen.set(all[i].task, n); if (n <= RECHECK_KEEP_PER_TASK) kept.push(all[i]); }
+      d.rechecks = kept.reverse();
+      return { doc: d };
+    });
+    await renderStatus(file, r.doc);
+  }
+  for (const l of lines) say(l);
+  return failed ? 4 : 0;
+}
+
 function cmdValidate(file) {
   const { doc } = loadDoc(file);
   const dir = path.dirname(file);
@@ -338,8 +442,14 @@ function cmdView(file, flags) {
   // An invalid file's percent is not trustworthy: say so on the same line, list the errors, exit 1 (ST-08).
   const pct = invalid ? `${view.percent}${view.percent === 'unknown' ? '' : '%'} INVALID (${view.errors.length} validation error(s); this percent is not trustworthy)` : `${view.percent}${view.percent === 'unknown' ? '' : '%'}`;
   say(`${oneLine(doc.implementation)}: ${pct}${view.approximate ? ' approximate' : ''}${view.stale ? ' (stale)' : ''}${view.closed ? ' [closed]' : ''}`);
-  say(STATUSES.map((s) => `${s} ${c[s]}${s === 'verified' ? ' (claims)' : ''}`).join(' | ') + ` | total ${view.total}`);
+  const rv = view.rechecks;
+  say(STATUSES.map((s) => `${s} ${c[s]}${s === 'verified' ? ` (claims) · re-checked ${rv.rechecked}` : ''}`).join(' | ') + ` | total ${view.total}`);
   for (const k of view.claims) say(`claimed by ${oneLine(k.by ?? 'unknown')}: ${oneLine(k.id)} · verdict ${oneLine(k.evidence ?? 'none')} · at ${oneLine(k.at ?? 'unknown')} · sha ${k.sha ?? 'unreadable'}`);
+  for (const b of rv.by_task) {
+    const label = b.result === 'pass' ? 'PASS' : b.result === 'timeout' ? 'FAILED (timeout)' : 'FAILED';
+    say(`re-check ${label}: ${oneLine(b.id)} · sha ${oneLine(String(b.sha ?? 'unknown').slice(0, 12))}${b.at_head ? ' (HEAD)' : ' (older commit)'}${b.dirty ? ' (dirty tree)' : ''} · exit ${b.exit ?? 'none'} · at ${oneLine(b.at ?? 'unknown')}`);
+  }
+  if (rv.unchecked.length) say(`unchecked (no check command): ${rv.unchecked.map((u) => oneLine(u.id) + (u.reason ? ` (${oneLine(u.reason)})` : '')).join(', ')}`);
   for (const b of view.blocked_list) say(`blocked ${oneLine(b.id)}: ${oneLine(b.blocked_on)}`);
   for (const e of view.errors) say(`invalid: ${oneLine(e)}`);
   return invalid ? 1 : 0;
@@ -375,6 +485,7 @@ async function main() {
     case 'validate': return cmdValidate(file);
     case 'view': return cmdView(file, flags);
     case 'render': await cmdRender(file, flags); return 0;
+    case 'recheck': return cmdRecheck(file, flags);
     default: throw new Refusal(`unknown command "${cmd}"\n${USAGE}`, 2);
   }
 }
