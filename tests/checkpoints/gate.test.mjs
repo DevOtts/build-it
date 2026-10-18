@@ -277,3 +277,50 @@ test("H-22: the kind names and wave ids still work", () => {
   assert.equal(due(d, "W9").status, 3);
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+// ---- H-22 (merge lock) and H-27: incremental merges ----------------------------------------
+// A program that merges slice by slice has no review of the whole before a merge. plan-it's merge_model
+// "incremental" writes no pre-merge; the closing reviews gate the release.
+function incremental() {
+  const doc = clone(FIXTURE);
+  const cps = doc.review_checkpoints.checkpoints.filter((c) => c.kind !== "pre-merge");
+  cps.forEach((c, i) => { c.id = `CP-${String(i + 1).padStart(2, "0")}`; });
+  const adv = { id: "CP-03", kind: "adversarial", at: "after the last wave, before release", review: "adversarial", blocks: "tag, publish or deploy", gates: ["release"], covers: ["W0", "W1", "W2"], evidence: "plan/reviews/CP-03-adversarial.md" };
+  cps.splice(2, 0, adv);
+  cps.forEach((c, i) => { c.id = `CP-${String(i + 1).padStart(2, "0")}`; });
+  doc.review_checkpoints.checkpoints = cps;
+  doc.review_checkpoints.count = cps.length;
+  doc.review_checkpoints.inputs.merge_model = "incremental";
+  return doc;
+}
+
+test("incremental: a slice may merge with no closing verdict; the release is held", () => {
+  const d = repo(incremental());
+  assert.equal(gate(d, "--action", "merge", "--slice", "A0").status, 0);
+  assert.equal(gate(d, "--action", "merge").status, 0);
+  const r = gate(d, "--action", "release");
+  assert.equal(r.status, 2, r.stdout);
+  assert.match(r.stdout, /CP-03/);
+  assert.match(r.stdout, /CP-04/);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("incremental: the plan is valid without a pre-merge checkpoint", () => {
+  const d = repo(incremental());
+  const r = spawnSync(process.execPath, [SCRIPT, "plan", "--readiness", "plan/READINESS.json", "--root", d], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test("H-27: due --at merge returns every checkpoint that gates a merge (adversarial and pre-merge)", () => {
+  const doc = clone(FIXTURE);
+  doc.review_checkpoints.checkpoints.splice(2, 0, { id: "x", kind: "adversarial", at: "after the last wave, before pre-merge", review: "adv", blocks: "merge to main", gates: ["merge"], covers: ["W0", "W1", "W2"], evidence: "plan/reviews/CP-adv.md" });
+  doc.review_checkpoints.checkpoints.forEach((c, i) => { c.id = `CP-${String(i + 1).padStart(2, "0")}`; });
+  doc.review_checkpoints.count = doc.review_checkpoints.checkpoints.length;
+  const d = repo(doc);
+  const r = due(d, "merge");
+  assert.match(r.stdout, /CP-03 adversarial/);
+  assert.match(r.stdout, /CP-04 pre-merge/);
+  assert.doesNotMatch(r.stdout, /pre-release/);
+  fs.rmSync(d, { recursive: true, force: true });
+});

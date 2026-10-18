@@ -4,6 +4,26 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.1.3] — 2026-10-18
+
+Patch release. Two defects in the checkpoint gate found when the real READINESS of the first real run
+was put through it. IDs are that run's findings.
+
+### Fixed
+- **H-22** a program that merges slice by slice could never merge: `gate --action merge` named the
+  adversarial and pre-merge checkpoints, which cover every wave and can only run after the last one.
+  plan-it 5.2.0 now writes no pre-merge when the plan's `merge_model` is `incremental`, and the
+  closing reviews gate the release instead. The reader accepts such a block: the "no pre-merge
+  checkpoint" check asks for a pre-release one when `inputs.merge_model` is `incremental`.
+- **H-27** `due --at merge` returned only the pre-merge checkpoint while `gate --action merge` also
+  needed the adversarial one. `due --at merge` and `due --at release` now list every checkpoint whose
+  gates the matching `gate --action` checks (`release` includes the promotion ones, as the gate does).
+
+### Note
+- The 4.1.2 entry below labels the `due --at merge|release` prefix-match fix as **H-22**. The run's id
+  for that finding is **H-25**; H-22 is the merge lock fixed here. The test names
+  `H-22: due --at ...` cover the H-25 fix.
+
 ## [4.1.2] — 2026-10-18
 
 Patch release. Two defects in the 4.1.1 checkpoint gate, found when the real READINESS of the first
