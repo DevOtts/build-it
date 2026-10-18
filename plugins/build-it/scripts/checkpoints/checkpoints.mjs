@@ -91,20 +91,41 @@ export function holdsText(c) {
   return parts.join(", and ");
 }
 
-// Every slice the given slice depends on, directly or through others.
+// depends_on must be absent or a list of non-empty strings. A string would be
+// walked character by character and block by accident.
+export function sliceErrors(slices) {
+  const errs = [];
+  for (const s of slices) {
+    if (s.depends_on === undefined) continue;
+    if (!Array.isArray(s.depends_on)) errs.push(`slice ${s.id}: depends_on must be a list of slice ids, got ${s.depends_on === null ? "null" : typeof s.depends_on}`);
+    else s.depends_on.forEach((d, i) => { if (typeof d !== "string" || !d.trim()) errs.push(`slice ${s.id}: depends_on[${i}] must be a slice id string, got ${JSON.stringify(d)}`); });
+  }
+  return errs;
+}
+
+// Every slice the given slice depends on, directly or through others. A cycle
+// is a plan error: it comes back as the path, for example ["A", "C", "A"].
 function ancestors(byId, id) {
   const seen = new Set();
   const unknown = new Set();
-  const stack = [...(byId.get(id).depends_on || [])].map(String);
-  while (stack.length) {
-    const d = stack.pop();
-    if (seen.has(d) || unknown.has(d)) continue;
-    const s = byId.get(d);
-    if (!s) { unknown.add(d); continue; }
-    seen.add(d);
-    for (const x of s.depends_on || []) stack.push(String(x));
-  }
-  return { seen, unknown };
+  const done = new Set();
+  const trail = [];
+  let cycle = null;
+  const visit = (x) => {
+    if (cycle) return;
+    const at = trail.indexOf(x);
+    if (at >= 0) { cycle = [...trail.slice(at), x]; return; }
+    if (done.has(x)) return;
+    const s = byId.get(x);
+    if (!s) { unknown.add(x); return; }
+    if (x !== id) seen.add(x);
+    trail.push(x);
+    for (const d of s.depends_on || []) visit(d);
+    trail.pop();
+    done.add(x);
+  };
+  visit(id);
+  return { seen, unknown, cycle };
 }
 
 // Does the covered set contain slice `id`? Returns true/false, or a string
@@ -124,6 +145,8 @@ export function gateDecision(doc, block, action, sliceId, verdictOf) {
   if (!ACTIONS.includes(action)) return { exit: 1, lines: [`gate: --action must be one of ${ACTIONS.join(", ")}`] };
   if (action === "start" && !sliceId) return { exit: 1, lines: ["gate: --action start needs --slice <id>: a start is held only by checkpoints covering what that slice depends on"] };
   const slices = Array.isArray(doc.slices) ? doc.slices.filter((s) => s && s.id !== undefined).map((s) => ({ ...s, id: String(s.id) })) : [];
+  const bad = sliceErrors(slices);
+  if (bad.length) return { exit: 1, lines: ["CANNOT EVALUATE: READINESS.json slices are malformed (a plan error, not a block):", ...bad.map((e) => `  ${e}`)] };
   const byId = new Map(slices.map((s) => [s.id, s]));
   let target = null;
   if (sliceId) {
@@ -137,6 +160,7 @@ export function gateDecision(doc, block, action, sliceId, verdictOf) {
   let anc = null;
   if (action === "start") {
     anc = ancestors(byId, target.id);
+    if (anc.cycle) return { exit: 1, lines: [`CANNOT EVALUATE start ${target.id}: depends_on has a cycle (a plan error, not a block): ${anc.cycle.join(" -> ")}`] };
     if (anc.unknown.size) unknown.push(`slice ${target.id} depends on ${[...anc.unknown].join(", ")}, which ${anc.unknown.size === 1 ? "is" : "are"} not in READINESS.json slices`);
   }
   for (const c of block.checkpoints) {
@@ -179,18 +203,68 @@ export function gateDecision(doc, block, action, sliceId, verdictOf) {
   return { exit: 0, lines };
 }
 
-// Verdict file contract: non-empty, carries `checkpoint: <id>` and
-// `verdict: PASS|FAIL` lines (review-it writes them in its report header).
+// The lines a reader sees as report prose: fenced code (``` and ~~~),
+// indented code and HTML comments are dropped, as review-it's status-sync does.
+export function proseLines(text) {
+  const out = [];
+  let fence = null;
+  let comment = false;
+  for (const raw of text.split(/\r?\n/)) {
+    if (fence) {
+      const close = raw.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null;
+      out.push("");
+      continue;
+    }
+    if (comment) { if (raw.includes("-->")) comment = false; out.push(""); continue; }
+    const open = raw.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (open) { fence = open[1]; out.push(""); continue; }
+    if (/^\s*<!--/.test(raw)) { if (!raw.includes("-->")) comment = true; out.push(""); continue; }
+    if (/^( {4,}|\t)/.test(raw)) { out.push(""); continue; }
+    out.push(raw.trim());
+  }
+  return out;
+}
+
+// Pure: judge a verdict file's text for checkpoint `id`. Only prose counts.
+// The overall verdict is every `verdict:` line outside a `task:` block; they
+// must all say the same value, exactly PASS or FAIL. An overall PASS with a
+// task block that is not PASS is contradictory. Anything ambiguous is not a pass.
+export function parseVerdict(text, id) {
+  if (!text.trim()) return { state: "invalid", reason: "the file is empty" };
+  const cps = new Set();
+  const overall = [];
+  const tasks = [];
+  let inTask = false;
+  for (const line of proseLines(text)) {
+    if (line === "") { inTask = false; continue; }
+    let m = /^checkpoint\s*:\s*(.*)$/i.exec(line);
+    if (m) { cps.add(m[1].trim()); continue; }
+    if (/^task\s*:/i.test(line)) { inTask = true; continue; }
+    m = /^verdict\s*:\s*(.*)$/i.exec(line);
+    if (m) (inTask ? tasks : overall).push(m[1].trim().split(/\s+/)[0].replace(/^[`*]+|[`*.,;]+$/g, ""));
+  }
+  if (cps.size === 0) return { state: "invalid", reason: `no "checkpoint: ${id}" line outside code and comments` };
+  if (cps.size > 1) return { state: "invalid", reason: `names more than one checkpoint (${[...cps].join(", ")})` };
+  if (!cps.has(id)) return { state: "invalid", reason: `does not name checkpoint ${id} (names ${[...cps][0]})` };
+  if (!overall.length) return { state: "invalid", reason: `no "verdict: PASS|FAIL" line outside code and comments` };
+  const odd = [...new Set([...overall, ...tasks])].filter((v) => v !== "PASS" && v !== "FAIL");
+  if (odd.length) return { state: "invalid", reason: `verdict value ${odd.map((v) => JSON.stringify(v)).join(", ")} is not PASS or FAIL` };
+  const values = new Set(overall);
+  if (values.size > 1) return { state: "contradictory", reason: "the overall verdict lines say both PASS and FAIL" };
+  const v = overall[0];
+  if (v === "PASS" && tasks.some((t) => t !== "PASS")) return { state: "contradictory", reason: "overall PASS but a task block is not PASS" };
+  return { state: v === "PASS" ? "pass" : "fail", reason: null };
+}
+
+// Verdict file contract: review-it's report with one `checkpoint: <id>` line
+// and an overall `verdict: PASS|FAIL` line in its header.
 export function readVerdict(file, id) {
   if (!fs.existsSync(file)) return { state: "missing", reason: `no verdict file at ${file}` };
   let text;
   try { text = fs.readFileSync(file, "utf8"); } catch (e) { return { state: "invalid", reason: `cannot read ${file}: ${e.code || e.message}` }; }
-  if (!text.trim()) return { state: "invalid", reason: `${file} is empty` };
-  const cp = /^\s*checkpoint:\s*(\S+)\s*$/im.exec(text);
-  if (!cp || cp[1] !== id) return { state: "invalid", reason: `${file} does not name checkpoint ${id}` };
-  const v = /^\s*verdict:\s*(PASS|FAIL)\b/im.exec(text);
-  if (!v) return { state: "invalid", reason: `${file} has no "verdict: PASS|FAIL" line` };
-  return { state: v[1] === "PASS" ? "pass" : "fail", reason: null };
+  const v = parseVerdict(text, id);
+  return v.reason ? { state: v.state, reason: `${file}: ${v.reason}` } : v;
 }
 
 function arg(args, name) {
@@ -245,7 +319,7 @@ export function main(argv, cwd = process.cwd()) {
     if (v.state === "pass") { out(`PASS ${c.id} ${c.kind}: ${c.evidence}`); return done(0); }
     const holds = `Holds until PASS: ${holdsText(c)}. Work that does not depend on it goes on; ask \`gate\``;
     if (v.state === "missing") { out(`MISSING ${c.id}: ${v.reason}. ${holds}.`); return done(2); }
-    out(`${v.state === "fail" ? "FAIL" : "INVALID"} ${c.id}: ${v.reason || "review-it verdict is FAIL"}. ${holds}.`);
+    out(`${v.state === "fail" ? "FAIL" : v.state.toUpperCase()} ${c.id}: ${v.reason || "review-it verdict is FAIL"}. ${holds}.`);
     return done(1);
   }
   if (cmd === "gate") {
