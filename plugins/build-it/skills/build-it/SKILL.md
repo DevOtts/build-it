@@ -30,6 +30,7 @@ Each gate is a self-audit at a specific decision point. Canonical wording: this 
 - **Interlock gate** (safe parallel, v3) — trigger: at run start, and before spawning any parallel *mutating* agent · test: does `.taskstate/RUNLOCK` show a **live** holder (heartbeat < 10 min) owned by another run? · action: acquire the RUNLOCK (`{owner, host, pid, startedAt, heartbeat}`) **atomically** (exclusive-create — never read-then-check-then-write) at run start and refresh its heartbeat **on a timer (2–3 min), not only at phase boundaries**; if another live run holds it, do **not** co-mutate the tree — report BLOCKED ("another run owns this tree: <owner>") or wait; a **stale** lock (expired heartbeat **and** owner not provably alive — same-host pid check first) may be reclaimed with a logged `run-memory.md` note; release on the stop-hook. The working tree is shared state — serialize or isolate concurrent writers, never hope. See `../references/parallel-safety.md`.
 - **Worktree gate** (safe parallel, v3) — trigger: before fanning out parallel agents that write/edit files · test: does each *mutating* agent have its own working tree, or are two sharing one `.git`? · action: each parallel mutating agent gets its own `git worktree` on an `agent/<lane>` branch off the run base; the **coordinator alone** merges lanes back, **sequentially**. Read-only fan-out (research/search/audit) may share the tree; it still never mutates git. No subagent runs `git merge`/`checkout`/`reset` in a shared tree. See `../references/parallel-safety.md`.
 - **Integration gate** (safe parallel, v3) — trigger: after a slice/worktree merges back, before the wave is accepted · test: does the **merged** tree pass the project's integration shape (build, lockfile present + consistent, declared tests/lints) — not merely "the worker's file exists"? · action: run the integration check on the merged result; a slice green in isolation but integration-broken (canonical: a `package.json` added with no lockfile → CI break) is **reopened, not accepted**. Acceptance is integration, not existence. See `../references/parallel-safety.md`.
+- **Status-boundary gate** — trigger: entering or leaving any task (start, block, unblock, finish) in a run whose package has a `status.json` · test: did the status writer exit 0 for *this* boundary? · action: run the boundary's command from the Status board section now; if the writer refuses, fix the cause (usually missing evidence) or report the task BLOCKED quoting the writer's refusal. A task finished without a write counts as not finished.
 
 ---
 
@@ -47,6 +48,29 @@ Created at Step 2, all in `.taskstate/` (run state never goes in `.claude/`, whi
 Cross-run memory: at the end of the run, roll durable lessons into `.build-it-reports/lessons.md`; read it at Step 0 of every future run on the same project. A legacy `.fable-it-reports/lessons.md` (pre-v3.1.0 runs) may be read for lessons, read-only; never create or write `.fable-it-reports/`.
 
 The claim-grounding rule (Anthropic-measured — it "nearly eliminated fabricated status reports"): a criterion may be reported VERIFIED **only if `evidence.md` holds a passing tool result from this session**. Everything else is IMPLEMENTED-NOT-VERIFIED or BLOCKED. This converts honest reporting from self-policing into a lookup.
+
+---
+
+## Status board (status.json)
+
+Applies when the run's implementation package has a `status.json` (written by plan-it). Resolve it once at Step 2 and record the path in `grounding.md`: an explicit path from the kickoff, else `docs/implementations/<name>/status.json`, else the singular `docs/implementation/<name>/status.json`. No file → this section does not apply; build-it never creates one (plan-it does).
+
+Every edit goes through the single writer. Set `W=${CLAUDE_PLUGIN_ROOT}/scripts/status/status-write.mjs` and `F=<path to status.json>`, then at each task boundary run (the status-boundary gate checks it):
+
+```
+start    node "$W" set <ID> --status in-progress --owner build-it:<tier> --by build-it --file "$F"
+block    node "$W" set <ID> --status blocked --blocked-on "<who/what>" --by build-it --file "$F"
+unblock  node "$W" set <ID> --status in-progress --by build-it --file "$F"
+finish   node "$W" set <ID> --status done --evidence <evidence> --by build-it --file "$F"
+piece    node "$W" piece "<piece>" --status <status> --whats-left "<one line>" --by build-it --file "$F"
+report   node "$W" view --file "$F"
+```
+
+- `<ID>` is the task id exactly as in `status.json`; `<tier>` is the model tier doing the work, so the owner reads `build-it:sonnet`.
+- `<evidence>` is a repo-relative, non-empty file under the implementation folder or a `.taskstate/` dir — the test output or result log that backs the task. No such file yet → the task is not finished; do not write `done`.
+- Write at the boundary, not at the end of the run. A task finished without a write counts as not finished. Refresh the task's `piece` row after its finish (`whats_left` is one plain line, never a percent).
+- In parallel runs the coordinator makes every write against the one `status.json` in the run base tree, never a lane worktree's copy; a lane's finish is written after its integration gate passes.
+- Never write `verified` (review-it's), never hand-edit `status.json` or `STATUS.md` (the writer re-renders it), never type a percent. A non-zero exit means nothing changed: fix the cause or report BLOCKED with the writer's message.
 
 ---
 
@@ -155,6 +179,9 @@ Run window: <start> → <end>   |   Model: <detected model + posture row>   |   
 ## Could not be verified (and why)
 - <criterion>: <what blocked real verification, what was used instead>
 
+## Status board
+<the `report` command's `status-write view` output, quoted verbatim — or "no status.json for this package">
+
 ## No silent caps
 - <everything skipped, sampled, bounded, or capped this run, and why — an empty section must say "nothing was capped">
 
@@ -170,7 +197,7 @@ Run window: <start> → <end>   |   Model: <detected model + posture row>   |   
 ## Recommended next actions
 ```
 
-Every status cell obeys the claim gate: VERIFIED rows quote their `evidence.md` entry; rows without a ledger entry cannot read VERIFIED. Fill the report from the ledger, not from memory.
+Every status cell obeys the claim gate: VERIFIED rows quote their `evidence.md` entry; rows without a ledger entry cannot read VERIFIED. Fill the report from the ledger, not from memory. Progress comes from the quoted `status-write view` output, never a typed percent.
 
 **Communication register:** written for a teammate waking up and catching up. Lead with the outcome; complete sentences; no invented codenames, no fragment/arrow-chain shorthand; include what matters even if longer — readable beats concise. Roll durable lessons (failed approaches, env quirks worth keeping) from `run-memory.md` into `.build-it-reports/lessons.md`.
 
@@ -204,6 +231,7 @@ Tell the user the exact paths, then stop. Do not append a plan or "want me to co
 - Do not parallelize decision-coupled work without the shared contract. (Guardrail 1.)
 - Do not build against a cross-session assumption with no interface file. (Guardrail 2.)
 - Do not trust an idle subagent delivered — check its output on disk. (Delegation gate.)
+- Do not batch status writes to the end of the run, hand-edit `status.json`/`STATUS.md`, or write `verified`. (Status-boundary gate.)
 - Do not route authenticated real-Chrome work to `/full-qa`; it goes to `/chrome-cdp-control` per-write gates. (Step 5 table.)
 - Do not silently default every packet to the top model tier, and never downgrade the verifier. (Step 3 routing rule.)
 - Do not keep a struggling lower-tier agent on a packet past one corrected re-dispatch — escalate it one tier up and log it; and do not pre-pay top tier for struggle that hasn't happened. (Routing gate 3.)
