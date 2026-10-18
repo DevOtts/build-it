@@ -195,7 +195,7 @@ test('ST-08 forged migration history needs approximate:true and may only be a pr
 test('ST-08 migrated file cannot drop approximate', () => {
   const s = mkImpl();
   const rel = s.ev('evidence/any.md', 'hello\n');
-  hand(s, (d) => { d.approximate = true; const t = d.waves[0].tasks[0]; t.status = 'verified'; t.evidence = rel; d.history.push({ at: T0, task: 'T-1', from: 'not-started', to: 'verified', by: 'migration' }); });
+  hand(s, (d) => { d.approximate = true; d.history = []; const t = d.waves[0].tasks[0]; t.status = 'verified'; t.evidence = rel; d.history.push({ at: T0, task: 'T-1', from: 'not-started', to: 'verified', by: 'migration' }); });
   assert.equal(errs(s), '');
   hand(s, (d) => { d.approximate = false; });
   assert.match(errs(s), /requires "approximate": true/);
@@ -363,7 +363,7 @@ test('ST-08 two writers on the same task: valid file, history chain intact', asy
     const [ra, rb] = await Promise.all([a, b]);
     assert.equal(ra.code, 0, ra.err); assert.equal(rb.code, 0, rb.err);
     assert.equal(s.w(['validate']).code, 0);
-    assert.equal(s.read().history.length, 2);
+    assert.equal(s.read().history.filter((h) => h.note !== 'created').length, 2);
     assert.deepEqual(s.residue(), []);
   }
 });

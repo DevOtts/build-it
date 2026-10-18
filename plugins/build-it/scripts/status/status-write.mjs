@@ -143,6 +143,11 @@ function buildInit(plan, by, dir) {
   };
 }
 
+// Every task the writer creates gets a `created` entry (not-started -> not-started), so the board records who planned it.
+function pushCreated(doc, tasks, by) {
+  for (const t of tasks) pushHistory(doc, { task: t.id, from: 'not-started', to: 'not-started', by, note: 'created' });
+}
+
 async function cmdInit(file, flags) {
   const by = needBy(flags); allow(by, ['plan-it'], 'init');
   if (!flags.plan) throw new Refusal('--plan <plan.json> is required', 2);
@@ -152,12 +157,12 @@ async function cmdInit(file, flags) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const r = await mutate(file, (doc) => {
     const fresh = buildInit(plan, by, path.dirname(file));
-    if (!doc) return { doc: fresh };
+    if (!doc) { pushCreated(fresh, allTasks(fresh), by); return { doc: fresh }; }
     frozen(doc);
     for (const w of fresh.waves) {
       const ew = doc.waves.find((x) => x.id === w.id);
-      if (!ew) { doc.waves.push(w); continue; }
-      for (const t of w.tasks) if (!allTasks(doc).some((x) => x.id === t.id)) ew.tasks.push(t);
+      if (!ew) { doc.waves.push(w); pushCreated(doc, w.tasks, by); continue; }
+      for (const t of w.tasks) if (!allTasks(doc).some((x) => x.id === t.id)) { ew.tasks.push(t); pushCreated(doc, [t], by); }
     }
     for (const p of fresh.pieces) if (!doc.pieces.some((x) => x.piece === p.piece)) doc.pieces.push(p);
     return { doc };

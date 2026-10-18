@@ -114,6 +114,9 @@ test('AT-22 build-it run on a 3-task fixture', () => {
   }
 
   const doc = fx.read();
+  const created = doc.history.filter((h) => h.note === 'created');
+  assert.deepEqual(created.map((h) => [h.task, h.by]), [['T-1', 'plan-it'], ['T-2', 'plan-it'], ['T-3', 'plan-it']]);
+  doc.history = doc.history.filter((h) => h.note !== 'created');
   assert.ok(doc.history.length >= 6, `history has ${doc.history.length} entries`);
   assert.deepEqual(new Set(doc.history.map((h) => h.task)), new Set(['T-1', 'T-2', 'T-3']));
   assert.deepEqual(doc.history.map((h) => [h.task, h.to]), order, 'history is in boundary order');
