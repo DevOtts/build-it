@@ -66,6 +66,7 @@ piece    node "$W" piece "<piece>" --status <status> --whats-left "<one line>" -
 report   node "$W" view --file "$F"
 ```
 
+- **Run start: register the session** (so a build session shows up live even if the user forgot `/init-it`). When the goal or kickoff names an implementation folder, run once at Step 2, after resolving `F`: `node "$I" <name> --role build --repo <repo root>`, where `I` is init-it's `scripts/init-it.mjs` (env `INIT_IT_SCRIPT`, else the newest installed `plugins/cache/*/init-it/<ver>/scripts/init-it.mjs`). Re-running is idempotent (same session id: no duplicate, role updated). init-it not installed → skip with one `grounding.md` line; any non-zero exit → record its message and continue (registration never blocks a build). init-it writes `status.json` only through this same writer (`session add --by init-it`).
 - `<ID>` is the task id exactly as in `status.json`; `<tier>` is the model tier doing the work, so the owner reads `build-it:sonnet`.
 - `<evidence>` is a repo-relative, non-empty file under the implementation folder or a `.taskstate/` dir — the test output or result log that backs the task. No such file yet → the task is not finished; do not write `done`.
 - Write at the boundary, not at the end of the run. A task finished without a write counts as not finished. Refresh the task's `piece` row after its finish (`whats_left` is one plain line, never a percent).
