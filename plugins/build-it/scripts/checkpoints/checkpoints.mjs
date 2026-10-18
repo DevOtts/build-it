@@ -14,7 +14,7 @@
 //   checkpoints.mjs plan              list the checkpoints
 //   checkpoints.mjs due --at <ref>    checkpoints due at a boundary: a wave id
 //                                     (W1), a task id, adversarial, pre-merge, pre-release
-//                                     (`merge` and `release` are aliases of the last two)
+//                                     (`merge` and `release` list every checkpoint that gates that action)
 //   checkpoints.mjs check --id CP-01  is the verdict file there and a PASS?
 //   checkpoints.mjs status            every checkpoint with its verdict state
 //   checkpoints.mjs gate --action start|promote|merge|release [--slice <id>]
@@ -48,7 +48,9 @@ export function validateBlock(block) {
     if (c && c.gates !== undefined && (!Array.isArray(c.gates) || !c.gates.length || c.gates.some((g) => !GATES.includes(g)))) errs.push(`checkpoints[${i}].gates must be a non-empty subset of ${GATES.join(", ")}`);
     if (c && c.covers !== undefined && (!Array.isArray(c.covers) || c.covers.some((x) => typeof x !== "string" || !x.trim()))) errs.push(`checkpoints[${i}].covers must be a list of slice or wave ids`);
   });
-  if (block.inputs && block.inputs.tasks > 0 && !block.checkpoints.some((c) => c && c.kind === "pre-merge")) errs.push("no pre-merge checkpoint");
+  // With incremental merges there is no review before a merge; the closing review is the pre-release one.
+  const closing = block.inputs && block.inputs.merge_model === "incremental" ? "pre-release" : "pre-merge";
+  if (block.inputs && block.inputs.tasks > 0 && !block.checkpoints.some((c) => c && c.kind === closing)) errs.push(`no ${closing} checkpoint`);
   return errs;
 }
 
@@ -56,10 +58,15 @@ export function validateBlock(block) {
 // `merge` and `release` name the boundary, not a wave. Matching them by the "after <ref>" prefix of the `at`
 // text returned the pre-release checkpoint for `merge` (its text starts "after merge,") and nothing for
 // `release` (finding H-22), so they are aliases of the two closing kinds and nothing else.
-const BOUNDARY_ALIAS = { merge: "pre-merge", release: "pre-release" };
+// They name the boundary, so they return every checkpoint whose gates the matching `gate --action` would
+// check, not only one kind (finding H-27: `due --at merge` named CP-06 while the merge gate also needed CP-05).
+const BOUNDARY_ACTION = { merge: "merge", release: "release" };
 export function dueAt(block, ref) {
   const r = String(ref);
-  if (BOUNDARY_ALIAS[r]) return block.checkpoints.filter((c) => c.kind === BOUNDARY_ALIAS[r]);
+  if (BOUNDARY_ACTION[r]) {
+    const want = ACTION_GATES[BOUNDARY_ACTION[r]];
+    return block.checkpoints.filter((c) => effective(c).gates.some((g) => want.includes(g)));
+  }
   return block.checkpoints.filter((c) => c.kind === r || c.at === `after ${r}` || String(c.at).startsWith(`after ${r},`));
 }
 
