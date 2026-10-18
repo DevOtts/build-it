@@ -8,7 +8,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import {
   SCHEMA_VERSION, STATUSES, ROLES, SESSION_ROLES, FORBIDDEN_KEYS, RENDER_MARKER,
   validate, computeView, checkEvidence, resolveRepoRoot, resolveStatusFile,
-  withLock, writeAtomic, nowIso, allTasks, newestActivity,
+  withLock, writeAtomic, nowIso, allTasks, newestActivity, movedEvidence,
 } from './status-lib.mjs';
 
 class Refusal extends Error { constructor(msg, code = 1) { super(msg); this.exitCode = code; } }
@@ -46,12 +46,12 @@ function allow(by, roles, what) {
   if (!roles.includes(by)) throw new Refusal(`role ${by} may not ${what} (allowed: ${roles.join(', ')})`, 1);
 }
 function rejectForbiddenFlags(flags) {
-  for (const k of FORBIDDEN_KEYS) if (k in flags) throw new Refusal(`forbidden key "${k}": computed values are never written by a model`, 1);
+  for (const k of Object.keys(flags)) if (FORBIDDEN_KEYS.includes(k.toLowerCase())) throw new Refusal(`forbidden key "${k}": computed values are never written by a model`, 1);
 }
 function scanForbidden(o, where) {
   if (Array.isArray(o)) return o.forEach((x) => scanForbidden(x, where));
   if (o && typeof o === 'object') {
-    for (const k of FORBIDDEN_KEYS) if (k in o) throw new Refusal(`forbidden key "${k}" in ${where}`, 1);
+    for (const k of Object.keys(o)) if (FORBIDDEN_KEYS.includes(k.toLowerCase())) throw new Refusal(`forbidden key "${k}" in ${where}`, 1);
     Object.values(o).forEach((x) => scanForbidden(x, where));
   }
 }
@@ -83,7 +83,8 @@ async function renderStatus(file, doc, { force = false, out, auto = true } = {})
     const view = computeView(doc, { dir });
     const body = mod.renderStatusMd(doc, view);
     const tmp = `${target}.tmp`;
-    fs.writeFileSync(tmp, body.endsWith('\n') ? body : body + '\n');
+    try { fs.unlinkSync(tmp); } catch { /* absent */ }
+    fs.writeFileSync(tmp, body.endsWith('\n') ? body : body + '\n', { flag: 'wx' });
     fs.renameSync(tmp, target);
   } catch (e) {
     if (!auto) throw new Refusal(`render failed: ${e.message}`, 1);
@@ -184,7 +185,7 @@ async function cmdSet(file, pos, flags) {
     if (from === 'verified' && to !== 'verified' && !nonEmpty(flags.note)) throw new Refusal('lowering a verified task requires --note', 1);
     if (to === 'blocked' && !nonEmpty(flags['blocked-on'])) throw new Refusal('blocked requires --blocked-on', 1);
     if (to === 'done' || to === 'verified') {
-      const ev = flags.evidence ?? t.evidence;
+      const ev = flags.evidence ?? movedEvidence(root, dir, t.evidence);
       const c = checkEvidence(root, dir, ev, to === 'verified' ? { verdictFor: id } : {});
       if (!c.ok) throw new Refusal(`${to} refused: ${c.reason}`, 1);
       t.evidence = ev;
@@ -206,16 +207,24 @@ async function cmdSet(file, pos, flags) {
 
 async function cmdPiece(file, pos, flags) {
   const name = pos[0]; if (!name) throw new Refusal('piece <PIECE> ...', 2);
-  const by = needBy(flags); rejectForbiddenFlags(flags); allow(by, ['build-it'], 'update pieces');
+  const by = needBy(flags); rejectForbiddenFlags(flags);
   if (flags.status && !STATUSES.includes(flags.status)) throw new Refusal(`invalid status "${flags.status}"`, 1);
+  // Pieces follow the task role rules (ST-08): verified only by review-it/conclude-it, blocked needs --blocked-on,
+  // lowering verified needs --note.
+  if (flags.status) allow(by, SET_ROLES[flags.status], `set piece status ${flags.status}`);
+  else allow(by, ['build-it'], 'update pieces');
+  if (by === 'review-it' && flags.status === 'in-progress' && !nonEmpty(flags.note)) throw new Refusal('review-it sending a piece back to in-progress requires --note "<failed case>"', 1);
   if (flags['whats-left'] !== undefined && /\d\s*%/.test(flags['whats-left'])) throw new Refusal('--whats-left must not be a percent', 1);
   const r = await mutate(file, (doc) => {
     const p = doc.pieces.find((x) => x.piece === name);
     if (!p) throw new Refusal(`unknown piece "${name}"`, 1);
+    const to = flags.status || p.status;
+    if (p.status === 'verified' && to !== 'verified' && !nonEmpty(flags.note)) throw new Refusal('lowering a verified piece requires --note', 1);
+    if (to === 'blocked' && !nonEmpty(flags['blocked-on'] ?? (flags.status ? undefined : p.blocked_on))) throw new Refusal('blocked requires --blocked-on', 1);
     if (flags.status) p.status = flags.status;
-    if ('blocked-on' in flags) p.blocked_on = flags['blocked-on'];
-    else if (flags.status && flags.status !== 'blocked') p.blocked_on = null;
+    if (to === 'blocked') { if ('blocked-on' in flags) p.blocked_on = flags['blocked-on']; } else p.blocked_on = null;
     if ('whats-left' in flags) p.whats_left = flags['whats-left'];
+    if ('note' in flags) p.note = flags.note;
     return { doc };
   });
   await renderStatus(file, r.doc);
@@ -230,7 +239,11 @@ async function cmdRenameRemove(cmd, file, pos, flags) {
     const t = findTask(doc, id);
     if (t.status !== 'not-started') throw new Refusal(`${cmd} refused: task ${id} is ${t.status} (task ids and work past not-started are stable)`, 1);
     if (cmd === 'rename') { t.title = flags.title; t.updated_at = nowIso(); }
-    else for (const w of doc.waves) w.tasks = w.tasks.filter((x) => x.id !== id);
+    else {
+      for (const w of doc.waves) w.tasks = w.tasks.filter((x) => x.id !== id);
+      // A task with history leaves a "removed" entry, so a hand deletion stays detectable (ST-08).
+      if (doc.history.some((h) => h.task === id)) pushHistory(doc, { task: id, from: 'not-started', to: 'removed', by, note: flags.note });
+    }
     return { doc };
   });
   await renderStatus(file, r.doc);
@@ -312,20 +325,30 @@ function cmdValidate(file) {
   return 0;
 }
 
+// One line of inert text: no newlines, no control or bidi characters (ST-08: a field must not forge a view line).
+const oneLine = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]+/g, ' ').trim();
+
 function cmdView(file, flags) {
   const { doc } = loadDoc(file);
   const view = computeView(doc, { dir: path.dirname(file) });
   if (view.error) { process.stderr.write(`${view.error}\n`); return 1; }
-  if (flags.json) { say(JSON.stringify(view, null, 2)); return 0; }
+  const invalid = view.errors.length > 0;
+  if (flags.json) { say(JSON.stringify(view, null, 2)); return invalid ? 1 : 0; }
   const c = view.counts;
-  say(`${doc.implementation}: ${view.percent}${view.percent === 'unknown' ? '' : '%'}${view.approximate ? ' approximate' : ''}${view.stale ? ' (stale)' : ''}${view.closed ? ' [closed]' : ''}`);
+  // An invalid file's percent is not trustworthy: say so on the same line, list the errors, exit 1 (ST-08).
+  const pct = invalid ? `${view.percent}${view.percent === 'unknown' ? '' : '%'} INVALID (${view.errors.length} validation error(s); this percent is not trustworthy)` : `${view.percent}${view.percent === 'unknown' ? '' : '%'}`;
+  say(`${oneLine(doc.implementation)}: ${pct}${view.approximate ? ' approximate' : ''}${view.stale ? ' (stale)' : ''}${view.closed ? ' [closed]' : ''}`);
   say(STATUSES.map((s) => `${s} ${c[s]}`).join(' | ') + ` | total ${view.total}`);
-  for (const b of view.blocked_list) say(`blocked ${b.id}: ${b.blocked_on}`);
-  return 0;
+  for (const b of view.blocked_list) say(`blocked ${oneLine(b.id)}: ${oneLine(b.blocked_on)}`);
+  for (const e of view.errors) say(`invalid: ${oneLine(e)}`);
+  return invalid ? 1 : 0;
 }
 
 async function cmdRender(file, flags) {
   const { doc } = loadDoc(file);
+  const dir = path.dirname(file);
+  const v = validate(doc, { dir, repoRoot: resolveRepoRoot(dir) });
+  if (!v.ok) throw new Refusal(`render refused: status.json fails validation, so its percent would be a lie:\n  ${v.errors.join('\n  ')}`, 1);
   await renderStatus(file, doc, { force: !!flags.force, out: flags.out, auto: false });
   say('rendered');
 }

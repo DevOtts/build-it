@@ -44,7 +44,10 @@ status-write render   --file F [--out P] [--force]
 - After `close` the file is frozen until `reopen`. Lock: `status.json.lock` (`wx`, stale after 30 s or when the holder pid is dead). Write: tmp, fsync, rename. Test hook `STATUS_WRITE_TEST_CRASH=after-tmp` exits 137 before the rename (test-only).
 - After each successful write `status-render.mjs` (if installed) re-renders STATUS.md, only when the target is absent or starts with the generated marker line. Hand-written boards are never overwritten (`render --force` overrides).
 - `validate` also flags hand edits: any non-`not-started` task whose last history entry does not match its status.
-- Residual risk: `--by` cannot authenticate the caller. It is a guardrail, not a security boundary.
+- `validate` also checks history integrity (ST-08): every `by` is a known role (or `migration`), only review-it/conclude-it move a task to `verified`, lowering from `verified` carries a note, each task's entries chain (`from` equals the previous `to`), a task reset to `not-started` by hand or deleted from the waves while it has history is flagged (`remove` records a `removed` entry), `closed` must match the last `*` entry, `migration` entries need `approximate: true` and may only precede writer entries, and timestamps may not lie in the future. Forbidden keys are matched in any letter case at any depth. Pieces follow the task role rules (`verified` only by review-it/conclude-it, `blocked` needs `--blocked-on`, lowering `verified` needs `--note`).
+- Evidence may not be (or resolve through a symlink to) `status.json`, its `.tmp`/`.lock`, or `STATUS.md`, in any letter case. A verdict file is refused when any `verdict:`/`result:` line is not PASS/VERIFIED, or when its `task:` lines name another task. After `close --move`, evidence paths under the old folder are mapped into `0-done/<name>`.
+- `view` prints `INVALID` with the errors and exits 1 when the file fails validation; `render` refuses an invalid file.
+- Residual risk: `--by` cannot authenticate the caller. It is a guardrail, not a security boundary. Anyone who can run the writer as review-it, or write a verdict-shaped file plus a matching history entry by hand, can still fake `verified`; deleting a never-started task together with nothing else is not detectable from the file alone.
 
 ## Callers
 
