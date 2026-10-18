@@ -77,7 +77,7 @@ export function checkEvidence(repoRoot, implDir, relPath, { verdictFor } = {}) {
   if (text.trim() === '') return { ok: false, reason: `evidence file has only whitespace: ${relPath}` };
   if (verdictFor !== undefined) {
     if (!text.includes('review-it')) return { ok: false, reason: `verdict file lacks the token "review-it": ${relPath}` };
-    if (!text.includes(String(verdictFor))) return { ok: false, reason: `verdict file does not name task ${verdictFor}: ${relPath}` };
+    if (!new RegExp(`(^|[^A-Za-z0-9_-])${String(verdictFor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_-])`).test(text)) return { ok: false, reason: `verdict file does not name task ${verdictFor}: ${relPath}` };
     if (!VERDICT_RE.test(text)) return { ok: false, reason: `verdict file lacks a "verdict: PASS" line: ${relPath}` };
   }
   return { ok: true };

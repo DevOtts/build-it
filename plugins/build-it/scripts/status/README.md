@@ -52,9 +52,21 @@ status-write render   --file F [--out P] [--force]
 |---|---|
 | plan-it | `init --by plan-it` (and `init --merge` to add new items), `rename`/`remove --by plan-it` for tasks still not-started. Never writes done/verified. |
 | build-it | `set <TASK> --status in-progress\|blocked\|done --by build-it` at every task boundary (`done` with `--evidence`, `blocked` with `--blocked-on`), `set --owner`, `piece ... --by build-it`. Never `verified`. |
-| review-it | `set <TASK> --status verified --evidence <verdict file> --by review-it`; `set <TASK> --status in-progress --note "<why>" --by review-it` on a failed case. |
-| conclude-it | `close --by conclude-it [--owner-note ..] [--end-sessions] [--move]`, `reopen --by conclude-it --note ..`, `session end --by conclude-it`. |
-| init-it | `session add ... --by init-it`, `session end ... --by init-it`. Nothing else. |
+| review-it | `set <TASK> --status verified --evidence <verdict file> --by review-it --file F`. The verdict file lives under the implementation folder or a `.taskstate/` dir (repo-relative path) and contains the word `review-it`, the exact task id and a line `verdict: PASS`. On a failed case: `set <TASK> --status in-progress --note "<failed case>" --by review-it` (the note is mandatory; it is recorded in history). |
+| conclude-it | In order: (1) `set <TASK> --status verified --evidence <existing review-it verdict> --by conclude-it` only to carry forward a verdict that already exists (same verdict check; it never invents one). (2) `close --by conclude-it [--owner-note "<why unverified tasks stay>"] [--end-sessions] [--move] --file F`. (3) `session end --session-id ID --by conclude-it` for single sessions. (4) `reopen --by conclude-it --note "<why>"` is the only command accepted after close. |
+| init-it | `session add --session-id ID --alias A --name N --role plan\|build\|review\|conclude\|other --by init-it` and `session end --session-id ID --by init-it`. Nothing else. |
+
+### What a refusal means (exit 1, file byte-identical, no `.tmp` or `.lock` left)
+
+| Message contains | Meaning | What the caller does |
+|---|---|---|
+| `verdict file does not name task X` / `lacks a "verdict: PASS" line` / `lacks the token "review-it"` | Evidence is not a PASS verdict for this task | review-it: write a correct verdict first. conclude-it: do not carry forward; ask review-it. |
+| `evidence must live under ...` / `does not exist` / `empty` | Bad evidence path | Fix the path (repo-relative, under the impl folder or `.taskstate/`). |
+| `review-it sending a task back to in-progress requires --note` / `lowering a verified task requires --note` | A note naming the failed case is mandatory | Re-run with `--note`. |
+| `close refused: N task(s) not verified (...)` | Unverified work remains | Run review-it, or pass `--owner-note` to close knowingly (history records task `*`). With `--move` nothing is moved. |
+| `close --move refused: 0-done target already exists` | `<parent>/0-done/<name>` is taken | Resolve the clash by hand; the close did not happen. |
+| `implementation is closed (frozen)` | Closed board | Only `reopen --by conclude-it --note ...`. |
+| `role X may not ...` | Wrong `--by` for this command | Use the role in the table above. |
 
 ---
 _Authored by [DevOtts](https://github.com/DevOtts)._

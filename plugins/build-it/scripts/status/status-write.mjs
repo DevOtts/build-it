@@ -175,7 +175,8 @@ async function cmdSet(file, pos, flags) {
   if (flags.status && !STATUSES.includes(flags.status)) throw new Refusal(`invalid status "${flags.status}" (allowed: ${STATUSES.join(', ')})`, 1);
   if (!flags.status && !('owner' in flags) && !('note' in flags)) throw new Refusal('set needs --status, --owner or --note', 2);
   if (flags.status) allow(by, SET_ROLES[flags.status], `set status ${flags.status}`);
-  else allow(by, ['build-it', 'review-it', 'conclude-it'], 'edit task fields');
+  else allow(by, ['build-it', 'review-it'], 'edit task fields');
+  if (by === 'review-it' && flags.status === 'in-progress' && !nonEmpty(flags.note)) throw new Refusal('review-it sending a task back to in-progress requires --note "<failed case>"', 1);
   const r = await mutate(file, (doc) => {
     const t = findTask(doc, id);
     const dir = path.dirname(file); const root = resolveRepoRoot(dir);
