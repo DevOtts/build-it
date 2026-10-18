@@ -292,3 +292,28 @@ test('init records a created history entry per task, validate passes; merge adds
   assert.equal(created('A-4').length, 1);
   assert.equal(s.w(['validate']).code, 0);
 });
+
+test('EV-01 sent back by review-it: done/verified without a fresh --evidence is refused, stored evidence is not reused', () => {
+  const s = verifiedTask();
+  assert.equal(s.w(['set', 'T-1', '--status', 'in-progress', '--note', 'case C-3 failed on re-review', '--by', 'review-it']).code, 0);
+  let before = s.bytes();
+  const d = s.w(['set', 'T-1', '--status', 'done', '--by', 'build-it']);
+  refused(s, d, /done refused: T-1 needs an explicit --evidence/);
+  assert.deepEqual(s.bytes(), before);
+  assert.equal(s.task('T-1').status, 'in-progress');
+  // reach done with fresh evidence, then verified without evidence is refused too
+  assert.equal(done(s, 'T-1', s.ev('evidence/T-1-redo.md')).code, 0);
+  before = s.bytes();
+  const v = s.w(['set', 'T-1', '--status', 'verified', '--by', 'review-it']);
+  refused(s, v, /verified refused: T-1 needs an explicit --evidence/);
+  assert.deepEqual(s.bytes(), before);
+  assert.equal(s.w(['set', 'T-1', '--status', 'verified', '--evidence', s.ev('evidence/v2.md', verdictText('T-1')), '--by', 'review-it']).code, 0);
+  assert.equal(s.task('T-1').status, 'verified');
+});
+
+test('EV-02 a note-only set on a done task still works without evidence', () => {
+  const s = mkImpl();
+  done(s, 'T-1', s.ev('evidence/T-1.md'));
+  assert.equal(s.w(['set', 'T-1', '--note', 'fyi', '--by', 'build-it']).code, 0);
+  assert.equal(s.task('T-1').status, 'done');
+});

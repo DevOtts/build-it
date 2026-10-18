@@ -40,6 +40,7 @@ status-write recheck  --file F [--task ID] [--timeout 60s] [--fresh]
 ## Rules enforced
 
 - `--by` is required on mutating commands. Roles: plan-it (init, rename/remove not-started), build-it (not-started, in-progress, blocked, done, owner, pieces), review-it (verified, in-progress), conclude-it (close, reopen, session end, verified carry-forward), init-it (session add/end).
+- Every transition into `done` or `verified` (`set --status done|verified`) must carry an explicit `--evidence`; without it the write is refused (exit 1, file byte-identical). Evidence already stored on the task is never reused, so a task sent back by review-it cannot return to done/verified on the verdict from before the failure. A note-only `set` does not touch evidence.
 - `done` needs evidence: repo-relative, no `..`, no symlink out of the repo, a regular non-empty file with non-whitespace content, under the implementation folder or a `.taskstate/` dir. `blocked` needs `--blocked-on`.
 - `verified` additionally needs a review-it verdict file: it contains `review-it`, the task id, and a `verdict: PASS` (or `result: VERIFIED`) line.
 - Lowering `verified` needs `--note`. `init` (and `init --merge` for tasks it adds) appends a `created` entry per new task: `{from: not-started, to: not-started, by: plan-it, note: created}`. Every status change appends `history` `{at, task, from, to, by, note}`. `updated_at` comes from the clock.
