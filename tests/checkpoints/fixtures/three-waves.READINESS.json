@@ -1,0 +1,145 @@
+{
+  "schema": "do-it-readiness/1",
+  "decisions": [
+    {
+      "id": "D1",
+      "status": "RESOLVED"
+    }
+  ],
+  "preflight": {
+    "passed": true
+  },
+  "owner_dependent_slices": 0,
+  "slices": [
+    {
+      "id": "A0",
+      "depends_on": [],
+      "wave": "W0"
+    },
+    {
+      "id": "B0",
+      "depends_on": [],
+      "wave": "W0"
+    },
+    {
+      "id": "A1",
+      "depends_on": [],
+      "wave": "W1"
+    },
+    {
+      "id": "B1",
+      "depends_on": [
+        "A0"
+      ],
+      "wave": "W1"
+    },
+    {
+      "id": "A2",
+      "depends_on": [
+        "B1"
+      ],
+      "wave": "W2"
+    },
+    {
+      "id": "B2",
+      "depends_on": [
+        "A1"
+      ],
+      "wave": "W2"
+    }
+  ],
+  "review_checkpoints": {
+    "schema": "review-checkpoints/1",
+    "policy": "CHECKPOINT-POLICY v1",
+    "inputs": {
+      "tasks": 6,
+      "epics": 2,
+      "waves": [
+        "W0",
+        "W1",
+        "W2"
+      ],
+      "flags": {
+        "cross_cutting": "a shared schema other lanes read",
+        "owner_gated": "the release needs the owner",
+        "new_surface": "a new CLI verb",
+        "data": null,
+        "money": null,
+        "security": null,
+        "prod_facing": "ships as a tagged release"
+      }
+    },
+    "score": {
+      "size": 1,
+      "complexity": 3,
+      "importance": 1,
+      "total": 5
+    },
+    "level": "heightened",
+    "count": 4,
+    "checkpoints": [
+      {
+        "id": "CP-01",
+        "kind": "wave",
+        "at": "after W0",
+        "review": "contract cases of the finished waves, on the merged tree",
+        "blocks": "slices that depend on W0 work, and promotion of W0 work",
+        "gates": [
+          "dependents",
+          "promotion"
+        ],
+        "covers": [
+          "W0"
+        ],
+        "evidence": "plan/reviews/CP-01-wave-w0.md"
+      },
+      {
+        "id": "CP-02",
+        "kind": "wave",
+        "at": "after W1",
+        "review": "contract cases of the finished waves, on the merged tree",
+        "blocks": "slices that depend on W1 work, and promotion of W1 work",
+        "gates": [
+          "dependents",
+          "promotion"
+        ],
+        "covers": [
+          "W1"
+        ],
+        "evidence": "plan/reviews/CP-02-wave-w1.md"
+      },
+      {
+        "id": "CP-03",
+        "kind": "pre-merge",
+        "at": "before merge to main",
+        "review": "the whole Test Contract on the integrated branch",
+        "blocks": "merge to main",
+        "gates": [
+          "merge"
+        ],
+        "covers": [
+          "W0",
+          "W1",
+          "W2"
+        ],
+        "evidence": "plan/reviews/CP-03-pre-merge.md"
+      },
+      {
+        "id": "CP-04",
+        "kind": "pre-release",
+        "at": "after merge, before tag, publish or deploy",
+        "review": "deploy-verify plus the [REAL] cases on the released artifact",
+        "blocks": "tag, publish or deploy",
+        "gates": [
+          "release"
+        ],
+        "covers": [
+          "W0",
+          "W1",
+          "W2"
+        ],
+        "evidence": "plan/reviews/CP-04-pre-release.md"
+      }
+    ]
+  }
+}
