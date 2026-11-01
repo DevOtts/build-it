@@ -152,6 +152,8 @@ Invoke `/launch` in **unattended mode** for environment inventory, tooling setup
 
 **Verifiability precheck.** Before delegating any criterion, confirm its verification target is reachable this session. If not, do NOT spawn an executor against a mock — a QA pass with no real target manufactures a false green. Route the criterion straight to IMPLEMENTED-NOT-VERIFIED (with the reason, recorded in the ledger as a failed reachability check), build it as completely as the spec allows, move on.
 
+**Stop conditions go in the first brief.** Every worker brief states its stop-conditions and gates (what must be green or true before it pushes, merges, deploys, or marks a criterion done) at dispatch. A mid-flight correction reaches a worker that may already have committed and pushed, so it is too late to act as a gate.
+
 **Honor explicitly named tools.** If the user assigned a tool to a kind of work, use it. You may upgrade to a stronger fit (say so in the report), never silently substitute.
 
 | Signal in the DoD | Delegate to |
