@@ -4,6 +4,22 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.2.0] — 2026-11-07
+
+Minor release. `status-write close` gets two behaviours from the do-it 1.1 epic A1 (A1-05, T-A1-06;
+the status-write change is A1-02/A1-05).
+
+### Added
+- `status-write close` closes a board in place without `--move`, also when the package already sits
+  in `0-done/`.
+
+### Changed
+- `status-write close --move` is crash-safe: it freezes the board, then does one rename. A re-run
+  completes a PARTIAL_FAILED move and writes one history entry.
+
+### Docs
+- The first worker brief carries the stop conditions (drain1031 W1b, #28).
+
 ## [4.1.3] — 2026-10-18
 
 Patch release. Two defects in the checkpoint gate found when the real READINESS of the first real run
