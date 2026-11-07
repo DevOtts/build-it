@@ -341,28 +341,52 @@ async function cmdSession(file, pos, flags) {
   say(`session ${sub} ok`);
 }
 
+// close [--move] [--owner-note TEXT] [--end-sessions]. Without --move the board is closed in place (also for a package
+// that already lives in 0-done/). With --move the board is frozen first, then the folder is moved with ONE rename
+// (atomic on one filesystem; never a copy, so never a half-moved tree). A run killed between the freeze and the
+// rename leaves PARTIAL_FAILED: board closed, folder not moved. Re-running "close --move" sees the frozen board,
+// adds no second history entry and completes the move.
+function moveFolder(dir, target) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  try { fs.renameSync(dir, target); } catch (e) {
+    if (e.code === 'EXDEV') throw new Refusal(`close --move refused: ${dir} and ${target} are on different filesystems; a rename is the only move allowed (nothing moved)`, 1);
+    throw new Refusal(`close --move failed (nothing moved): ${e.message}`, 1);
+  }
+}
 async function cmdClose(file, flags) {
   const by = needBy(flags); allow(by, ['conclude-it'], 'close');
   const dir = path.dirname(file);
+  const target = path.join(path.dirname(dir), '0-done', path.basename(dir));
+  if (flags.move && path.basename(path.dirname(dir)) === '0-done') throw new Refusal('close --move refused: the package is already in 0-done; close it in place (without --move)', 1);
+  if (flags.move && fs.existsSync(file)) {
+    const { doc: cur } = loadDoc(file);
+    if (cur.closed === true) {
+      // Resume after PARTIAL_FAILED: the board is already frozen, only the move is left.
+      if (fs.existsSync(target)) throw new Refusal('close --move refused: 0-done target already exists', 1);
+      moveFolder(dir, target);
+      say(`board already closed; resumed the move (PARTIAL_FAILED recovered): closed and moved to ${target}`);
+      return;
+    }
+  }
   const r = await mutate(file, (doc) => {
     const open = allTasks(doc).filter((t) => t.status !== 'verified');
     if (open.length && !nonEmpty(flags['owner-note'])) {
       throw new Refusal(`close refused: ${open.length} task(s) not verified (${open.map((t) => t.id).join(', ')}); pass --owner-note to override`, 1);
     }
-    if (flags.move && fs.existsSync(path.join(path.dirname(dir), '0-done', path.basename(dir)))) throw new Refusal('close --move refused: 0-done target already exists', 1);
+    if (flags.move && fs.existsSync(target)) throw new Refusal('close --move refused: 0-done target already exists', 1);
     if (open.length) pushHistory(doc, { task: '*', from: 'open', to: 'closed', by, note: flags['owner-note'] });
-    else pushHistory(doc, { task: '*', from: 'open', to: 'closed', by, note: null });
+    else pushHistory(doc, { task: '*', from: 'open', to: 'closed', by, note: nonEmpty(flags['owner-note']) ? flags['owner-note'] : null });
     doc.closed = true;
     if (flags['end-sessions']) for (const s of doc.sessions) if (!s.ended_at) s.ended_at = nowIso();
     return { doc };
   });
   await renderStatus(file, r.doc);
   if (flags.move) {
-    const target = path.join(path.dirname(dir), '0-done', path.basename(dir));
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.renameSync(dir, target);
+    // Test-only hook (T-A1-06): die by SIGKILL after the board is frozen and before the folder move.
+    if (process.env.STATUS_WRITE_TEST_CRASH === 'after-freeze') process.kill(process.pid, 'SIGKILL');
+    moveFolder(dir, target);
     say(`closed and moved to ${target}`);
-  } else say('closed');
+  } else say('closed in place');
 }
 
 async function cmdReopen(file, flags) {
