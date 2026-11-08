@@ -74,3 +74,16 @@ test('A1-H2 an empty board (0 tasks) is refused by status-write close --move wit
   assert.equal(ok.code, 0, ok.err); assert.ok(fs.existsSync(path.join(targetOf(s), 'status.json')));
   fs.rmSync(s.root, { recursive: true, force: true });
 });
+
+test('A1-L1 close --move through a symlinked package dir is refused; nothing moved', () => {
+  const s = mkImpl({ tasks: ['T-1'] });
+  const real = path.join(s.root, 'elsewhere', 'demo');
+  fs.mkdirSync(path.dirname(real), { recursive: true });
+  fs.renameSync(s.dir, real);
+  fs.symlinkSync(real, s.dir);
+  const r = run(['close', '--by', 'conclude-it', '--move', '--owner-note', 'n', '--file', path.join(s.dir, 'status.json')]);
+  assert.equal(r.code, 1); assert.match(r.err, /is a symlink/);
+  assert.equal(fs.existsSync(targetOf(s)), false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(real, 'status.json'), 'utf8')).closed, false, 'board not frozen');
+  fs.rmSync(s.root, { recursive: true, force: true });
+});

@@ -376,6 +376,8 @@ async function cmdClose(file, flags) {
   const dir = path.dirname(file);
   const target = path.join(path.dirname(dir), '0-done', path.basename(dir));
   if (flags.move && path.basename(path.dirname(dir)) === '0-done') throw new Refusal('close --move refused: the package is already in 0-done; close it in place (without --move)', 1);
+  // A1-L1: a symlinked package dir would move only the link; the real content would stay outside the archive.
+  if (flags.move) { let l = null; try { l = fs.lstatSync(dir); } catch { /* checked below */ } if (l && l.isSymbolicLink()) throw new Refusal(`close --move refused: ${dir} is a symlink; move the real folder (nothing moved)`, 1); }
   if (flags.move && fs.existsSync(file)) {
     const { doc: cur } = loadDoc(file);
     if (cur.closed === true) {

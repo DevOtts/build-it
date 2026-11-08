@@ -100,6 +100,7 @@ A claim depends on trusting the verdict file. A re-check does not: it runs the t
 | `close refused: N task(s) not verified (...)` | Unverified work remains | Run review-it, or pass `--owner-note` to close knowingly (history records task `*`). With `--move` nothing is moved. |
 | `close refused: the board has no tasks, so nothing is verified` | Empty board (0 tasks) | Pass `--owner-note` to close it knowingly (CP-03 A1-H2). |
 | `close --move refused: 0-done target already exists` | `<parent>/0-done/<name>` is taken | Resolve the clash by hand; the close did not happen. |
+| `close --move refused: <dir> is a symlink` | The package dir is a symlink | Move the real folder; the link would leave the content outside the archive (CP-03 A1-L1). |
 | `close --move refused: the package is already in 0-done` | The folder is already archived | Close it in place: `close` without `--move` |
 | `implementation is closed (frozen)` | Closed board | Only `reopen --by conclude-it --note ...`. |
 | `role X may not ...` | Wrong `--by` for this command | Use the role in the table above. |
