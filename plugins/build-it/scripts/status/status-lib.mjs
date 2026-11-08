@@ -125,12 +125,16 @@ export function allTasks(doc) {
 
 // Freeze digest (do-it 1.1 CP-03 A1-H1). "close" stores board_sha256 in its "*" history entry: the sha256 of the
 // canonical JSON (keys sorted at every depth) of the board as frozen, leaving out updated_at, rechecks (recheck may
-// append after close) and every history entry from the close entry on. A board whose digest no longer matches was
-// edited after it was frozen. doc-it check archive recomputes the same digest (keep the two in step).
+// append after close) and every history entry after the close entry. The close entry itself is covered without its
+// board_sha256 field, so its owner note, author and time cannot be rewritten after the freeze (CP-03 R2-L3). A board
+// whose digest no longer matches was edited after it was frozen. doc-it check archive recomputes the same digest
+// (keep the two in step).
 const canonical = (v) => (Array.isArray(v) ? v.map(canonical) : isObj(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v);
 export function boardDigest(doc, closeIndex) {
   const { updated_at: _u, rechecks: _r, ...rest } = doc;
-  rest.history = (Array.isArray(doc.history) ? doc.history : []).slice(0, closeIndex);
+  const h = Array.isArray(doc.history) ? doc.history : [];
+  rest.history = h.slice(0, closeIndex);
+  if (isObj(h[closeIndex])) { const { board_sha256: _d, ...entry } = h[closeIndex]; rest.history.push(entry); }
   return crypto.createHash('sha256').update(JSON.stringify(canonical(rest))).digest('hex');
 }
 // The "*" entry that froze the board, or null: the last "*" history entry, when it is a close.

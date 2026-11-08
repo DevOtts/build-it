@@ -28,6 +28,10 @@ the status-write change is A1-02/A1-05).
   `--owner-note`.
 - **A1-L1** (CP-03) `close --move` through a symlinked package dir moved only the link. It is now
   refused, nothing moved.
+- **R2-L3** (CP-03 round 2) `board_sha256` now also covers the close entry itself (without its
+  digest field), so the owner note, author and time of a freeze cannot be rewritten after the close.
+  doc-it computes the same digest. Boards frozen before this change report a digest mismatch; none
+  were released (4.2.0 is not tagged).
 
 ### Docs
 - The first worker brief carries the stop conditions (drain1031 W1b, #28).

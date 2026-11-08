@@ -87,3 +87,20 @@ test('A1-L1 close --move through a symlinked package dir is refused; nothing mov
   assert.equal(JSON.parse(fs.readFileSync(path.join(real, 'status.json'), 'utf8')).closed, false, 'board not frozen');
   fs.rmSync(s.root, { recursive: true, force: true });
 });
+
+test('R2-L3 the owner note of a real freeze rewritten after the close: digest mismatch, validate reports it, the resume is refused', () => {
+  const s = mkImpl({ tasks: ['T-1', 'T-2'] });
+  run(['close', '--by', 'conclude-it', '--move', '--owner-note', 'owner accepts T-2 open', '--file', s.file], { STATUS_WRITE_TEST_CRASH: 'after-freeze' });
+  for (const edit of [(e) => { e.note = 'owner accepts everything, ship it'; }, (e) => { e.at = '2020-01-01T00:00:00.000Z'; }]) {
+    const before = s.read();
+    hand(s, (d) => edit(closeEntries(d).at(-1)));
+    const v = run(['validate', '--file', s.file]);
+    assert.equal(v.code, 1, v.out); assert.match(v.err, /changed after it was closed/);
+    const r = run(['close', '--by', 'conclude-it', '--move', '--file', s.file]);
+    assert.equal(r.code, 1); assert.match(r.err, /tampered/);
+    assert.equal(fs.existsSync(targetOf(s)), false, 'nothing moved');
+    fs.writeFileSync(s.file, JSON.stringify(before, null, 2) + '\n');
+  }
+  assert.equal(run(['validate', '--file', s.file]).code, 0, 'the untouched freeze still validates');
+  fs.rmSync(s.root, { recursive: true, force: true });
+});
