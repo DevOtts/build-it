@@ -23,6 +23,9 @@ the status-write change is A1-02/A1-05).
   re-run of `close --move` resumes only a freeze status-write recorded (entry by conclude-it, digest
   matches, board validates, close rule held). Anything else is refused as tampered, nothing moved.
   `validate` flags a board edited after its close.
+- **A1-H2** (CP-03, G-2) `status-write close` closed an empty board (0 tasks) with no owner note;
+  only the conclude-it wrapper refused it. The writer now refuses it itself: an empty board needs
+  `--owner-note`.
 
 ### Docs
 - The first worker brief carries the stop conditions (drain1031 W1b, #28).

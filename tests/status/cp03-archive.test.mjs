@@ -57,3 +57,20 @@ test('A1-H1 a real PARTIAL_FAILED with an owner note still resumes (the freeze i
   assert.equal(run(['validate', '--file', path.join(targetOf(s), 'status.json')]).code, 0);
   fs.rmSync(s.root, { recursive: true, force: true });
 });
+
+test('A1-H2 an empty board (0 tasks) is refused by status-write close --move without an owner note; nothing moved', () => {
+  const s = mkImpl({ tasks: ['T-1', 'T-2'] });
+  hand(s, (d) => { d.waves = []; d.history = d.history.filter((h) => h.task === '*'); });
+  assert.equal(run(['validate', '--file', s.file]).code, 0);
+  const b = s.bytes();
+  for (const args of [['--move'], []]) {
+    const r = run(['close', '--by', 'conclude-it', ...args, '--file', s.file]);
+    assert.equal(r.code, 1, r.out); assert.match(r.err, /no tasks, so nothing is verified; pass --owner-note/);
+    assert.deepEqual(s.bytes(), b); assert.equal(fs.existsSync(targetOf(s)), false);
+  }
+  const ws = run(['close', '--by', 'conclude-it', '--move', '--owner-note', '   ', '--file', s.file]);
+  assert.equal(ws.code, 1); assert.equal(fs.existsSync(targetOf(s)), false);
+  const ok = run(['close', '--by', 'conclude-it', '--move', '--owner-note', 'owner: empty program, nothing was built', '--file', s.file]);
+  assert.equal(ok.code, 0, ok.err); assert.ok(fs.existsSync(path.join(targetOf(s), 'status.json')));
+  fs.rmSync(s.root, { recursive: true, force: true });
+});

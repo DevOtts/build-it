@@ -98,6 +98,7 @@ A claim depends on trusting the verdict file. A re-check does not: it runs the t
 | `evidence must live under ...` / `does not exist` / `empty` | Bad evidence path | Fix the path (repo-relative, under the impl folder or `.taskstate/`). |
 | `review-it sending a task back to in-progress requires --note` / `lowering a verified task requires --note` | A note naming the failed case is mandatory | Re-run with `--note`. |
 | `close refused: N task(s) not verified (...)` | Unverified work remains | Run review-it, or pass `--owner-note` to close knowingly (history records task `*`). With `--move` nothing is moved. |
+| `close refused: the board has no tasks, so nothing is verified` | Empty board (0 tasks) | Pass `--owner-note` to close it knowingly (CP-03 A1-H2). |
 | `close --move refused: 0-done target already exists` | `<parent>/0-done/<name>` is taken | Resolve the clash by hand; the close did not happen. |
 | `close --move refused: the package is already in 0-done` | The folder is already archived | Close it in place: `close` without `--move` |
 | `implementation is closed (frozen)` | Closed board | Only `reopen --by conclude-it --note ...`. |

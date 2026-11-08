@@ -391,6 +391,8 @@ async function cmdClose(file, flags) {
   const r = await mutate(file, (doc) => {
     const tasks = allTasks(doc);
     const open = tasks.filter((t) => t.status !== 'verified');
+    // A1-H2: an empty board has nothing verified; closing it is an owner decision, never a default.
+    if (!tasks.length && !nonEmpty(flags['owner-note'])) throw new Refusal('close refused: the board has no tasks, so nothing is verified; pass --owner-note to close it knowingly', 1);
     if (open.length && !nonEmpty(flags['owner-note'])) {
       throw new Refusal(`close refused: ${open.length} task(s) not verified (${open.map((t) => t.id).join(', ')}); pass --owner-note to override`, 1);
     }
