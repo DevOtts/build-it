@@ -123,6 +123,23 @@ export function allTasks(doc) {
   return out;
 }
 
+// Freeze digest (do-it 1.1 CP-03 A1-H1). "close" stores board_sha256 in its "*" history entry: the sha256 of the
+// canonical JSON (keys sorted at every depth) of the board as frozen, leaving out updated_at, rechecks (recheck may
+// append after close) and every history entry from the close entry on. A board whose digest no longer matches was
+// edited after it was frozen. doc-it check archive recomputes the same digest (keep the two in step).
+const canonical = (v) => (Array.isArray(v) ? v.map(canonical) : isObj(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v);
+export function boardDigest(doc, closeIndex) {
+  const { updated_at: _u, rechecks: _r, ...rest } = doc;
+  rest.history = (Array.isArray(doc.history) ? doc.history : []).slice(0, closeIndex);
+  return crypto.createHash('sha256').update(JSON.stringify(canonical(rest))).digest('hex');
+}
+// The "*" entry that froze the board, or null: the last "*" history entry, when it is a close.
+export function closeEntryIndex(doc) {
+  const h = Array.isArray(doc && doc.history) ? doc.history : [];
+  for (let i = h.length - 1; i >= 0; i--) if (isObj(h[i]) && h[i].task === '*') return h[i].to === 'closed' ? i : -1;
+  return -1;
+}
+
 export function validate(doc, opts = {}) {
   const { dir, repoRoot } = opts;
   const errors = [];
@@ -181,6 +198,9 @@ export function validate(doc, opts = {}) {
   }
   if ((doc.closed === true) !== (lastStar !== null && lastStar.to === 'closed')) {
     err(doc.closed === true ? 'closed is true but no "close" history entry backs it (set by hand?)' : 'history says closed but "closed" is not true (reopened by hand?)');
+  } else if (doc.closed === true && lastStar.board_sha256 !== undefined) {
+    const ci = closeEntryIndex(doc);
+    if (!isStr(lastStar.board_sha256) || ci < 0 || boardDigest(doc, ci) !== lastStar.board_sha256) err('the board changed after it was closed (board_sha256 of the close entry does not match; edited by hand?)');
   }
   if (Array.isArray(doc.waves)) {
     doc.waves.forEach((w, wi) => {

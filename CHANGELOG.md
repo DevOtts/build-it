@@ -17,6 +17,13 @@ the status-write change is A1-02/A1-05).
 - `status-write close --move` is crash-safe: it freezes the board, then does one rename. A re-run
   completes a PARTIAL_FAILED move and writes one history entry.
 
+### Fixed
+- **A1-H1** (CP-03, G-2) a hand-set `closed: true` was taken as a PARTIAL_FAILED resume and moved
+  unchecked. `close` now records `board_sha256` (digest of the frozen board) in its close entry, and a
+  re-run of `close --move` resumes only a freeze status-write recorded (entry by conclude-it, digest
+  matches, board validates, close rule held). Anything else is refused as tampered, nothing moved.
+  `validate` flags a board edited after its close.
+
 ### Docs
 - The first worker brief carries the stop conditions (drain1031 W1b, #28).
 
