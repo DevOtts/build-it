@@ -4,6 +4,38 @@ All notable changes to build-it (formerly fable-it) are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [4.2.0] — 2026-11-07
+
+Minor release. `status-write close` gets two behaviours from the do-it 1.1 epic A1 (A1-05, T-A1-06;
+the status-write change is A1-02/A1-05).
+
+### Added
+- `status-write close` closes a board in place without `--move`, also when the package already sits
+  in `0-done/`.
+
+### Changed
+- `status-write close --move` is crash-safe: it freezes the board, then does one rename. A re-run
+  completes a PARTIAL_FAILED move and writes one history entry.
+
+### Fixed
+- **A1-H1** (CP-03, G-2) a hand-set `closed: true` was taken as a PARTIAL_FAILED resume and moved
+  unchecked. `close` now records `board_sha256` (digest of the frozen board) in its close entry, and a
+  re-run of `close --move` resumes only a freeze status-write recorded (entry by conclude-it, digest
+  matches, board validates, close rule held). Anything else is refused as tampered, nothing moved.
+  `validate` flags a board edited after its close.
+- **A1-H2** (CP-03, G-2) `status-write close` closed an empty board (0 tasks) with no owner note;
+  only the conclude-it wrapper refused it. The writer now refuses it itself: an empty board needs
+  `--owner-note`.
+- **A1-L1** (CP-03) `close --move` through a symlinked package dir moved only the link. It is now
+  refused, nothing moved.
+- **R2-L3** (CP-03 round 2) `board_sha256` now also covers the close entry itself (without its
+  digest field), so the owner note, author and time of a freeze cannot be rewritten after the close.
+  doc-it computes the same digest. Boards frozen before this change report a digest mismatch; none
+  were released (4.2.0 is not tagged).
+
+### Docs
+- The first worker brief carries the stop conditions (drain1031 W1b, #28).
+
 ## [4.1.3] — 2026-10-18
 
 Patch release. Two defects in the checkpoint gate found when the real READINESS of the first real run

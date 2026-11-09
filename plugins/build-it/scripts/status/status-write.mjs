@@ -8,7 +8,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import {
   SCHEMA_VERSION, STATUSES, ROLES, SESSION_ROLES, FORBIDDEN_KEYS, RENDER_MARKER,
   validate, computeView, checkEvidence, resolveRepoRoot, resolveStatusFile,
-  withLock, writeAtomic, nowIso, allTasks, newestActivity,
+  withLock, writeAtomic, nowIso, allTasks, newestActivity, boardDigest, closeEntryIndex,
   checkShapeError, normalizeCheck, sameCheck, RECHECK_KEEP_PER_TASK,
 } from './status-lib.mjs';
 import {
@@ -353,15 +353,37 @@ function moveFolder(dir, target) {
     throw new Refusal(`close --move failed (nothing moved): ${e.message}`, 1);
   }
 }
+// A frozen board may be moved by a re-run only when status-write itself froze it (A1-H1): the board validates, its
+// last "*" entry is a close by conclude-it carrying board_sha256, the digest still matches (nothing edited since the
+// freeze), and the close rule held at freeze time (tasks all verified, or a note on the close entry). Anything else is
+// a board whose closed flag was set or kept by hand: refused as tampered, nothing moved.
+function provenFreeze(doc, dir) {
+  const v = validate(doc, { dir, repoRoot: resolveRepoRoot(dir) });
+  if (!v.ok) return `the board fails validation:\n  ${v.errors.join('\n  ')}`;
+  const ci = closeEntryIndex(doc);
+  const e = ci >= 0 ? doc.history[ci] : null;
+  if (!e) return 'no close history entry backs closed:true';
+  if (e.by !== 'conclude-it') return `the close entry is by "${e.by}", not conclude-it`;
+  if (typeof e.board_sha256 !== 'string') return 'the close entry has no board_sha256 (not frozen by this writer; reopen with a note and close again)';
+  if (boardDigest(doc, ci) !== e.board_sha256) return 'the board changed after the freeze (board_sha256 mismatch)';
+  const tasks = allTasks(doc);
+  if (!tasks.length && !nonEmpty(e.note)) return 'the board has no tasks and the close entry has no owner note';
+  if (tasks.some((t) => t.status !== 'verified') && !nonEmpty(e.note)) return 'unverified tasks and the close entry has no owner note';
+  return null;
+}
 async function cmdClose(file, flags) {
   const by = needBy(flags); allow(by, ['conclude-it'], 'close');
   const dir = path.dirname(file);
   const target = path.join(path.dirname(dir), '0-done', path.basename(dir));
   if (flags.move && path.basename(path.dirname(dir)) === '0-done') throw new Refusal('close --move refused: the package is already in 0-done; close it in place (without --move)', 1);
+  // A1-L1: a symlinked package dir would move only the link; the real content would stay outside the archive.
+  if (flags.move) { let l = null; try { l = fs.lstatSync(dir); } catch { /* checked below */ } if (l && l.isSymbolicLink()) throw new Refusal(`close --move refused: ${dir} is a symlink; move the real folder (nothing moved)`, 1); }
   if (flags.move && fs.existsSync(file)) {
     const { doc: cur } = loadDoc(file);
     if (cur.closed === true) {
-      // Resume after PARTIAL_FAILED: the board is already frozen, only the move is left.
+      // Resume after PARTIAL_FAILED: only a freeze this writer recorded may be resumed (A1-H1).
+      const why = provenFreeze(cur, dir);
+      if (why) throw new Refusal(`close --move refused: closed:true is not a freeze recorded by status-write (tampered?): ${why}; nothing moved`, 1);
       if (fs.existsSync(target)) throw new Refusal('close --move refused: 0-done target already exists', 1);
       moveFolder(dir, target);
       say(`board already closed; resumed the move (PARTIAL_FAILED recovered): closed and moved to ${target}`);
@@ -369,15 +391,19 @@ async function cmdClose(file, flags) {
     }
   }
   const r = await mutate(file, (doc) => {
-    const open = allTasks(doc).filter((t) => t.status !== 'verified');
+    const tasks = allTasks(doc);
+    const open = tasks.filter((t) => t.status !== 'verified');
+    // A1-H2: an empty board has nothing verified; closing it is an owner decision, never a default.
+    if (!tasks.length && !nonEmpty(flags['owner-note'])) throw new Refusal('close refused: the board has no tasks, so nothing is verified; pass --owner-note to close it knowingly', 1);
     if (open.length && !nonEmpty(flags['owner-note'])) {
       throw new Refusal(`close refused: ${open.length} task(s) not verified (${open.map((t) => t.id).join(', ')}); pass --owner-note to override`, 1);
     }
     if (flags.move && fs.existsSync(target)) throw new Refusal('close --move refused: 0-done target already exists', 1);
-    if (open.length) pushHistory(doc, { task: '*', from: 'open', to: 'closed', by, note: flags['owner-note'] });
-    else pushHistory(doc, { task: '*', from: 'open', to: 'closed', by, note: nonEmpty(flags['owner-note']) ? flags['owner-note'] : null });
     doc.closed = true;
     if (flags['end-sessions']) for (const s of doc.sessions) if (!s.ended_at) s.ended_at = nowIso();
+    const at = doc.history.length;
+    pushHistory(doc, { task: '*', from: 'open', to: 'closed', by, note: nonEmpty(flags['owner-note']) ? flags['owner-note'] : null });
+    doc.history[at].board_sha256 = boardDigest(doc, at);
     return { doc };
   });
   await renderStatus(file, r.doc);
